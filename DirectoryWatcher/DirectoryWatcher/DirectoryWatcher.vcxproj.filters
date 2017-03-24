@@ -27,10 +27,16 @@
     <ClCompile Include="DirectoryWatcher.cpp">
       <Filter>Source Files\DirectoryWatcher</Filter>
     </ClCompile>
+    <ClCompile Include="CancelationToken.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DirectoryWatcher.h">
       <Filter>Header Files\DirectoryWatcher</Filter>
+    </ClInclude>
+    <ClInclude Include="CancelationToken.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
