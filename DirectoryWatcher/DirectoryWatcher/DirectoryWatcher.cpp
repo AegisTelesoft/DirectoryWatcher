@@ -36,6 +36,12 @@ void masterThreadTask(struct MasterThreadData data)
 		workers.push_back(thread(workerThreadTask, struct WorkerThreadData(data.directories[i], i, data.token)));
 		
 	}
+
+	/*while (!data.token->IsCanceled())
+	{
+		
+	}*/
+
 	for (int i = 0; i < workers.size(); i++)
 	{
 		workers[i].join();
@@ -44,7 +50,9 @@ void masterThreadTask(struct MasterThreadData data)
 
 void workerThreadTask(struct WorkerThreadData data)
 {
-	while (true) {
+	std::cout << "Slave nr.: " << data.threadId << std::endl;
+	while (true) 
+	{
 	
 		// doing some work here
 		std::this_thread::sleep_for(std::chrono::milliseconds(5000));
@@ -58,7 +66,7 @@ void workerThreadTask(struct WorkerThreadData data)
 	}
 }
 
-void DirectoryWatcher::AddDirectory(const char* directory) 
+void DirectoryWatcher::AddDirectory(string& directory)
 {
 
 }
@@ -68,7 +76,7 @@ void DirectoryWatcher::RemoveDirectory(int id)
 
 }
 
-void DirectoryWatcher::RemoveDirectory(const char* directory) 
+void DirectoryWatcher::RemoveDirectory(string& directory)
 {
 
 }
@@ -76,13 +84,23 @@ void DirectoryWatcher::RemoveDirectory(const char* directory)
 void DirectoryWatcher::Stop() 
 {
 	m_ctPtr->Cancel();
-	std::cout << "Stop." << std::endl;
+	m_isWatching = false;
 }   
 
 DirectoryWatcher::~DirectoryWatcher() 
 {
-	std::cout << "Directory Watcher Destructor."<< std::endl;
 	m_ctPtr->Cancel();
 	m_masterThread.join();
 }
 
+Directory::Directory(string path, int id)
+	: Path(path), Id(id) { 
+}
+
+MasterThreadData::MasterThreadData(vector<Directory> &directories, CancelationToken* token)
+	: directories(directories), token(token) {
+}
+
+WorkerThreadData::WorkerThreadData(Directory dir, int threadId, CancelationToken* token)
+	: directory(dir), threadId(threadId), token(token) {
+}

@@ -14,10 +14,9 @@ int main(int argc, char *argv[]) {
 	DirectoryWatcher watcher(directories);
 
 	watcher.Watch(false);
-	//uncomment this shit below to check how stop function handles thread termination
-	/*system("pause");
-	watcher.Stop();*/
 
-	std::cout << "Main scope end." << std::endl;
+	system("pause");
+	watcher.Stop();
+
 	return 0;
 }

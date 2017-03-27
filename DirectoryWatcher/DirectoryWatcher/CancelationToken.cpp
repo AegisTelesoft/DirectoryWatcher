@@ -1,6 +1,6 @@
 #include "CancelationToken.h"
 
-CancelationToken::CancelationToken() :  m_cancel(false)
+CancelationToken::CancelationToken() : m_cancel(false)
 {
 
 }
@@ -14,5 +14,7 @@ void CancelationToken::Cancel()
 
 bool CancelationToken::IsCanceled()
 {
+	// ~lock_guard(); effectively calls m.unlock() where m is the mutex passed to the lock_guard's constructor.
+	std::lock_guard<std::mutex> lock(m_mutex);
 	return m_cancel;
 }

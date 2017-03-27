@@ -25,23 +25,22 @@ public:
 
 	void Watch(bool watchSubDir);
 	void Stop();
-	void AddDirectory(const char* directory);
+	void AddDirectory(string& directory);
 	void RemoveDirectory(int id);
-	void RemoveDirectory(const char* directory);
+	void RemoveDirectory(string& directory);
 
 private:
 	vector<struct Directory> m_directories;
 	thread m_masterThread;
 	mutex m_mutex;
-	bool m_isWatching = false;
 	CancelationToken m_ct;
 	CancelationToken* m_ctPtr = &m_ct;
+	bool m_isWatching = false;
 };
 
 struct Directory 
 {
-	Directory(string path, int id) 
-		: Path(path), Id(id) { };
+	Directory(string path, int id);
 
 	string Path;
 	int Id;
@@ -49,19 +48,17 @@ struct Directory
 
 struct WorkerThreadData 
 {
-	WorkerThreadData(struct Directory dir, int threadId, CancelationToken* token)
-		: directory(dir), threadId(threadId), token(token) {}
+	WorkerThreadData(Directory dir, int threadId, CancelationToken* token);
 
 	struct Directory directory;
-	int threadId;
 	CancelationToken* token;
+	int threadId;
 };
 
 struct MasterThreadData {
-	MasterThreadData(vector<struct Directory> &directories, CancelationToken* token) 
-		: directories(directories), token(token) {}
+	MasterThreadData(vector<Directory> &directories, CancelationToken* token);
 
-	vector<struct Directory> directories;
+	vector<Directory> directories;
 	CancelationToken* token;
 };
 
