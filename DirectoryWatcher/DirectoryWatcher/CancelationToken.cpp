@@ -14,6 +14,8 @@ void CancelationToken::CancelGlobally()
 
 bool CancelationToken::Cancel(int id)
 {
+	// Returns true if cancel action is successful. 
+	// Otherwise returns false if previous thread isn't canceled yet
 	std::lock_guard<std::mutex> lock(m_mutex);
 	if (m_id == -1) 
 	{
