@@ -7,10 +7,14 @@ class CancelationToken
 public:
 	CancelationToken();
 	
-	void Cancel();
-	bool IsCanceled();
+	void CancelGlobally();
+	bool Cancel(int id);
+	void Reset();
+	bool IsGloballyCanceled();
+	bool IsCanceled(int id);
 
 private:
-	bool m_cancel;
+	bool m_globalCancel;
+	int m_id;
 	std::mutex m_mutex;
 };

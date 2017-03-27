@@ -5,7 +5,7 @@
 #include <vector>
 #include <thread>
 #include <mutex>
-
+#include <algorithm>
 #include <chrono>
 
 #include "CancelationToken.h"
@@ -26,39 +26,32 @@ public:
 	void Watch(bool watchSubDir);
 	void Stop();
 	void AddDirectory(string& directory);
-	void RemoveDirectory(int id);
 	void RemoveDirectory(string& directory);
 
 private:
-	vector<struct Directory> m_directories;
+	vector<string> m_newDirectories;
+	vector<string> m_dirsToRemove;
 	thread m_masterThread;
 	mutex m_mutex;
 	CancelationToken m_ct;
-	CancelationToken* m_ctPtr = &m_ct;
 	bool m_isWatching = false;
 };
 
-struct Directory 
+struct WorkerThreadData
 {
-	Directory(string path, int id);
+	WorkerThreadData(string dir, int threadId, CancelationToken* token);
 
-	string Path;
-	int Id;
-};
-
-struct WorkerThreadData 
-{
-	WorkerThreadData(Directory dir, int threadId, CancelationToken* token);
-
-	struct Directory directory;
+	string directory;
 	CancelationToken* token;
 	int threadId;
 };
 
-struct MasterThreadData {
-	MasterThreadData(vector<Directory> &directories, CancelationToken* token);
+struct MasterThreadData 
+{
+	MasterThreadData(vector<string>* directories, vector<string>* dirsToRemove, CancelationToken* token);
 
-	vector<Directory> directories;
+	vector<string>* dirsToRemove;
+	vector<string>* newDirectories;
 	CancelationToken* token;
 };
 

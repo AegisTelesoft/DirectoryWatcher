@@ -1,20 +1,50 @@
 #include "CancelationToken.h"
 
-CancelationToken::CancelationToken() : m_cancel(false)
+CancelationToken::CancelationToken() : m_globalCancel(false), m_id(-1)
 {
 
 }
 
-void CancelationToken::Cancel()
+void CancelationToken::CancelGlobally()
 {
 	std::unique_lock<std::mutex> lock(m_mutex);
-	m_cancel = true;
+	m_globalCancel = true;
 	lock.unlock();
 }
 
-bool CancelationToken::IsCanceled()
+bool CancelationToken::Cancel(int id)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+	if (m_id == -1) 
+	{
+		m_id = id;
+		return true;
+	}
+	return false;
+}
+
+
+void CancelationToken::Reset()
+{
+	std::unique_lock<std::mutex> lock(m_mutex);
+	m_globalCancel = false;
+	m_id = -1;
+	lock.unlock();
+}
+
+
+bool CancelationToken::IsGloballyCanceled()
 {
 	// ~lock_guard(); effectively calls m.unlock() where m is the mutex passed to the lock_guard's constructor.
 	std::lock_guard<std::mutex> lock(m_mutex);
-	return m_cancel;
+	return m_globalCancel;
+}
+
+bool CancelationToken::IsCanceled(int id)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+	if (m_id == id)
+		return true;
+	else
+		return false;
 }
