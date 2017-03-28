@@ -2,13 +2,14 @@
 
 #include "DirectoryWatcher.h"
 
+void callback(string directory, ChangeType type);
 
 int main(int argc, char *argv[]) {
 
 	vector<string> directories;
 	directories.push_back(string("C:\\Users\\Egidijus Lileika\\Desktop\\test\\"));
 
-	DirectoryWatcher watcher(directories);
+	DirectoryWatcher watcher(directories, callback);
 
 	watcher.Watch(false);
 	system("pause");
@@ -18,4 +19,9 @@ int main(int argc, char *argv[]) {
 	watcher.Stop();
 	system("pause");
 	return 0;
+}
+
+void callback(string directory, ChangeType type)
+{
+	cout << directory << " " << type << endl;
 }

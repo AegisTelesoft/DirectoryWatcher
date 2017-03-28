@@ -1,16 +1,16 @@
 #include "DirectoryWatcher.h"
 
-DirectoryWatcher::DirectoryWatcher()
+DirectoryWatcher::DirectoryWatcher(dw_callback callback) : m_callback(callback)
 {
 	
 }
 
-DirectoryWatcher::DirectoryWatcher(string& directory)
+DirectoryWatcher::DirectoryWatcher(string& directory, dw_callback callback) : m_callback(callback)
 {
 	m_newDirectories.push_back(string(directory));
 }
 
-DirectoryWatcher::DirectoryWatcher(vector<string>& directories) 
+DirectoryWatcher::DirectoryWatcher(vector<string>& directories, dw_callback callback) : m_callback(callback)
 {
 	for (int i = 0; i < directories.size(); i++) 
 	{
@@ -22,7 +22,7 @@ void DirectoryWatcher::Watch(bool watchSubDir)
 {
 	if (!m_isWatching) 
 	{
-		m_masterThread = thread(masterThreadTask, MasterThreadData(&m_newDirectories, &m_dirsToRemove, &m_ct));
+		m_masterThread = thread(masterThreadTask, MasterThreadData(&m_newDirectories, &m_dirsToRemove, &m_ct, m_callback));
 		m_isWatching = true;
 	}
 }
@@ -38,7 +38,7 @@ void masterThreadTask(MasterThreadData data)
 		{
 			for (int i = data.newDirectories->size() - 1; i >= 0; i--)
 			{
-				WorkerThreadData workerData(data.newDirectories->operator[](i), workers.size() + 1, data.token);
+				WorkerThreadData workerData(data.newDirectories->operator[](i), workers.size() + 1, data.token, data.callback);
 				workers.push_back(std::make_pair(thread(watchDirectory, workerData), workerData));
 				data.newDirectories->erase(data.newDirectories->begin() + i);
 			}
@@ -103,32 +103,21 @@ int watchDirectory(WorkerThreadData data)
 
 	_splitpath_s(path, NULL, 0, lpDir, _MAX_DIR, lpFile, _MAX_FNAME, lpExt, _MAX_EXT);
 
-	// Watch the directory for file creation and deletion. 
-
 	watcherEventHandles[0] = FindFirstChangeNotificationA(lpDir, TRUE, FILE_NOTIFY_CHANGE_FILE_NAME);
-
-	if (watcherEventHandles[0] == INVALID_HANDLE_VALUE)
-	{
-		cout << "\nFailed to create file creation and deletion event handler" <<  endl;
-		return -1;
-	}
-
-	// Watch the subtree for directory creation and deletion. 
-
 	watcherEventHandles[1] = FindFirstChangeNotificationA(lpDir, TRUE, FILE_NOTIFY_CHANGE_DIR_NAME);
 
-	if (watcherEventHandles[1] == INVALID_HANDLE_VALUE)
+	if (watcherEventHandles[0] == INVALID_HANDLE_VALUE || watcherEventHandles[1] == INVALID_HANDLE_VALUE)
 	{
-		cout << "\nFailed to create directory creation and deletion event handler" << endl;
+		cout << "\nFailed to Directory watcher for " << lpDir <<  endl;
 		return -1;
 	}
+
 
 	while (!data.token->IsGloballyCanceled())
 	{
 		if (data.token->IsCanceled(data.threadId))
 		{
 			data.token->Reset();
-			cout << "Canceled thread! " << data.threadId << " " << endl;
 			break;
 		}
 
@@ -138,7 +127,8 @@ int watchDirectory(WorkerThreadData data)
 		{
 		case WAIT_OBJECT_0:
 
-			cout << "\nA file was created, renamed, or deleted in the directory" << endl;
+			//cout << "\nA file was created, renamed, or deleted in the directory" << endl;
+			data.callback(string(lpDir), FileNameChanged);
 
 			if (FindNextChangeNotification(watcherEventHandles[0]) == FALSE)
 			{
@@ -149,7 +139,8 @@ int watchDirectory(WorkerThreadData data)
 
 		case WAIT_OBJECT_0 + 1:
 
-			cout << "\nA directory was created, renamed, or deleted." << endl;
+			//cout << "\nA directory was created, renamed, or deleted." << endl;
+			data.callback(string(lpDir), DirectoryNameChanged);
 
 			if (FindNextChangeNotification(watcherEventHandles[1]) == FALSE)
 			{
@@ -167,7 +158,6 @@ int watchDirectory(WorkerThreadData data)
 			return -1;
 			break;
 		}
-
 	}
 #endif
 	return -1;
@@ -195,10 +185,10 @@ DirectoryWatcher::~DirectoryWatcher()
 	m_masterThread.join();
 }
 
-MasterThreadData::MasterThreadData(vector<string>* directories, vector<string>* dirsToRemove, CancelationToken* token)
-	: newDirectories(directories), dirsToRemove(dirsToRemove), token(token) {
+MasterThreadData::MasterThreadData(vector<string>* directories, vector<string>* dirsToRemove, CancelationToken* token, dw_callback callback)
+	: newDirectories(directories), dirsToRemove(dirsToRemove), token(token), callback(callback){
 }
 
-WorkerThreadData::WorkerThreadData(string dir, int threadId, CancelationToken* token)
-	: directory(dir), threadId(threadId), token(token) {
+WorkerThreadData::WorkerThreadData(string dir, int threadId, CancelationToken* token, dw_callback callback)
+	: directory(dir), threadId(threadId), token(token), callback(callback) {
 }
