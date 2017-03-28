@@ -39,7 +39,7 @@ void masterThreadTask(MasterThreadData data)
 			for (int i = data.newDirectories->size() - 1; i >= 0; i--)
 			{
 				WorkerThreadData workerData(data.newDirectories->operator[](i), workers.size() + 1, data.token);
-				workers.push_back(std::make_pair(thread(workerThreadTask, workerData), workerData));
+				workers.push_back(std::make_pair(thread(watchDirectory, workerData), workerData));
 				data.newDirectories->erase(data.newDirectories->begin() + i);
 			}
 		}
@@ -72,23 +72,105 @@ void masterThreadTask(MasterThreadData data)
 	}
 }
 
-void workerThreadTask(WorkerThreadData data)
+//void workerThreadTask(WorkerThreadData data)
+//{
+//	cout << "Slave nr.: " << data.threadId << endl;
+//	while (true) 
+//	{
+//	
+//
+//		
+//		if (data.token->IsGloballyCanceled() || data.token->IsCanceled(data.threadId))
+//		{
+//			if (data.token->IsCanceled(data.threadId))
+//				data.token->Reset();
+//			cout << "Canceled thread! " << data.threadId << " " << endl;
+//			break;
+//		}
+//	}
+//}
+
+int watchDirectory(WorkerThreadData data)
 {
-	std::cout << "Slave nr.: " << data.threadId << std::endl;
-	while (true) 
+#ifdef _WIN32
+	DWORD watcherWaitStatus;
+	HANDLE watcherEventHandles[2];
+	CHAR lpDir[_MAX_DIR];
+	CHAR lpFile[_MAX_FNAME];
+	CHAR lpExt[_MAX_EXT];
+
+	const char* path = data.directory.c_str();
+
+	_splitpath_s(path, NULL, 0, lpDir, _MAX_DIR, lpFile, _MAX_FNAME, lpExt, _MAX_EXT);
+
+	// Watch the directory for file creation and deletion. 
+
+	watcherEventHandles[0] = FindFirstChangeNotificationA(lpDir, TRUE, FILE_NOTIFY_CHANGE_FILE_NAME);
+
+	if (watcherEventHandles[0] == INVALID_HANDLE_VALUE)
 	{
-	
-		// doing some work here
-		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-		
-		if (data.token->IsGloballyCanceled() || data.token->IsCanceled(data.threadId))
+		cout << "\nFailed to create file creation and deletion event handler" <<  endl;
+		return -1;
+	}
+
+	// Watch the subtree for directory creation and deletion. 
+
+	watcherEventHandles[1] = FindFirstChangeNotificationA(lpDir, TRUE, FILE_NOTIFY_CHANGE_DIR_NAME);
+
+	if (watcherEventHandles[1] == INVALID_HANDLE_VALUE)
+	{
+		cout << "\nFailed to create directory creation and deletion event handler" << endl;
+		return -1;
+	}
+
+	while (!data.token->IsGloballyCanceled())
+	{
+		if (data.token->IsCanceled(data.threadId))
 		{
-			if (data.token->IsCanceled(data.threadId))
-				data.token->Reset();
-			std::cout << "Canceled thread! " << data.threadId << " " << std::endl;
+			data.token->Reset();
+			cout << "Canceled thread! " << data.threadId << " " << endl;
 			break;
 		}
+
+		watcherWaitStatus = WaitForMultipleObjects(2, watcherEventHandles, FALSE, 1000);
+
+		switch (watcherWaitStatus)
+		{
+		case WAIT_OBJECT_0:
+
+			cout << "\nA file was created, renamed, or deleted in the directory" << endl;
+
+			if (FindNextChangeNotification(watcherEventHandles[0]) == FALSE)
+			{
+				cout << "\nFailed to watch directory for file creation and deletion" << endl;
+				return -1;
+			}
+			break;
+
+		case WAIT_OBJECT_0 + 1:
+
+			cout << "\nA directory was created, renamed, or deleted." << endl;
+
+			if (FindNextChangeNotification(watcherEventHandles[1]) == FALSE)
+			{
+				cout << "\nFailed to watch directory for directory creation and deletion" << endl;
+				return -1;
+			}
+			break;
+
+		case WAIT_TIMEOUT:
+
+			break;
+
+		default:
+			cout << "\nUnhandled DirectoryWatcher wait status." << endl;
+			return -1;
+			break;
+		}
+
 	}
+#endif
+	return -1;
 }
 
 void DirectoryWatcher::AddDirectory(string& directory)

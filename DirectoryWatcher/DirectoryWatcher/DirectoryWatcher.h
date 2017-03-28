@@ -8,12 +8,24 @@
 #include <algorithm>
 #include <chrono>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <tchar.h>
+#include "atlstr.h"
+#endif
+
 #include "CancelationToken.h"
 
 using std::vector;
 using std::thread;
 using std::string;
 using std::mutex;
+using std::cout;
+using std::endl;
+
+void masterThreadTask(struct MasterThreadData data);
+void workerThreadTask(struct WorkerThreadData data);
+int watchDirectory(WorkerThreadData data);
 
 class DirectoryWatcher
 {
@@ -54,6 +66,3 @@ struct MasterThreadData
 	vector<string>* newDirectories;
 	CancelationToken* token;
 };
-
-void masterThreadTask(struct MasterThreadData data);
-void workerThreadTask(struct WorkerThreadData data);
