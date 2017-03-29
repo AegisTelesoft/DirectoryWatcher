@@ -8,14 +8,15 @@ int main(int argc, char *argv[]) {
 
 	vector<string> directories;
 	directories.push_back(string("C:\\Users\\Egidijus Lileika\\Desktop\\test\\"));
+	directories.push_back(string("C:\\Users\\Egidijus Lileika\\Desktop\\test - Copy\\"));
+	directories.push_back(string("C:\\Users\\Egidijus Lileika\\Desktop\\test - Copy - Copy\\New folder (3)\\"));
 
 	DirectoryWatcher watcher(directories, callback);
 
 	watcher.Watch(false);
 	system("pause");
-	//watcher.RemoveDirectory(string("thread 5"));
-	//watcher.RemoveDirectory(string("thread 6"));
-	//system("pause");
+	watcher.RemoveDir(string("C:\\Users\\Egidijus Lileika\\Desktop\\test\\"));
+	system("pause");
 	watcher.Stop();
 	system("pause");
 	return 0;

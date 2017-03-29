@@ -6,13 +6,12 @@
 #include <thread>
 #include <mutex>
 #include <algorithm>
-#include <chrono>
 
-#ifdef _WIN32
 #include <windows.h>
 #include <tchar.h>
-#include "atlstr.h"
-#endif
+#include <comdef.h>
+
+#include <cstdlib>
 
 #include "CancelationToken.h"
 
@@ -28,6 +27,7 @@ enum ChangeType;
 void masterThreadTask(struct MasterThreadData data);
 void workerThreadTask(struct WorkerThreadData data);
 int watchDirectory(WorkerThreadData data);
+VOID CALLBACK ReadDirChangesCallback(DWORD errorCode, DWORD bytesTransfered, LPOVERLAPPED lpOverlapped);
 
 typedef std::function<void(string&, ChangeType)> dw_callback;
 
@@ -41,8 +41,8 @@ public:
 
 	void Watch(bool watchSubDir);
 	void Stop();
-	void AddDirectory(string& directory);
-	void RemoveDirectory(string& directory);
+	void AddDir(string& directory);
+	void RemoveDir(string& directory);
 
 private:
 	vector<string> m_newDirectories;
@@ -50,35 +50,35 @@ private:
 	thread m_masterThread;
 	mutex m_mutex;
 	CancelationToken m_ct;
-	bool m_isWatching = false;
+	bool m_isWatching;
 	std::function<void(string&, ChangeType)> m_callback;
 };
 
 struct WorkerThreadData
 {
-	WorkerThreadData(string dir, int threadId, CancelationToken* token, dw_callback callback);
+	WorkerThreadData(string dir, bool watchSubtree, int threadId, CancelationToken* token, dw_callback callback);
 
 	string directory;
 	CancelationToken* token;
 	int threadId;
 	dw_callback callback;
+	bool watchSubtree;
 };
 
 struct MasterThreadData 
 {
-	MasterThreadData(vector<string>* directories, vector<string>* dirsToRemove, CancelationToken* token, dw_callback callback);
+	MasterThreadData(vector<string>* directories, bool watchSubtree, vector<string>* dirsToRemove, CancelationToken* token, dw_callback callback);
 
 	vector<string>* dirsToRemove;
 	vector<string>* newDirectories;
 	CancelationToken* token;
 	dw_callback callback;
+	bool watchSubtree;
 };
 
 enum ChangeType { 
-	FileNameChanged, 
-	FileCreated, 
-	FileDeleted, 
-	DirectoryNameChanged, 
-	DirectoryCreated, 
-	DirectoryDeleted
+	Added, 
+	Deleted, 
+	Modified, 
+	Renamed
 };
