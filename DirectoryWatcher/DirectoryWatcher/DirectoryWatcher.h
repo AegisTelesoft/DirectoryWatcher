@@ -18,6 +18,10 @@ using std::vector;
 using std::thread;
 using std::string;
 using std::mutex;
+using std::unique_lock;
+using std::make_pair;
+using std::pair;
+using std::move;
 using std::cout;
 using std::endl;
 

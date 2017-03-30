@@ -1,8 +1,8 @@
 #include "DirectoryWatcher.h"
 
-void masterThreadTask(struct MasterThreadData data);
-int watchDirectory(struct WorkerThreadData data);
-
+/**************************************************************************************************/
+/*                                                                                                */
+/**************************************************************************************************/
 class SharedThreadData
 {
 public: 
@@ -10,21 +10,29 @@ public:
 	dw_callback callback;
 	bool watchSubtree; 
 public:
-	SharedThreadData(CancelationToken& token, dw_callback callback, bool watchSubtree);
+	SharedThreadData(CancelationToken& token, 
+		dw_callback callback, bool watchSubtree);
 };
 
+/**************************************************************************************************/
+/*                                                                                                */
+/**************************************************************************************************/
 class MasterThreadData
 {
 public:
-	vector<string>& directories;
-	vector<string>& newDirectories;
-	vector<string>& dirsToRemove;
-	mutex& addRemoveMutex;
+	vector<string>&  directories;
+	vector<string>&  newDirectories;
+	vector<string>&  dirsToRemove;
+	mutex&           addRemoveMutex;
 	SharedThreadData sharedData;
 public:
-	MasterThreadData(vector<string>& directories, vector<string>& newDirectories, vector<string>& dirsToRemove, mutex& dwMutex, SharedThreadData sharedData);
+	MasterThreadData(vector<string>& directories, vector<string>& newDirectories, 
+		vector<string>& dirsToRemove, mutex& dwMutex, SharedThreadData sharedData);
 };
 
+/**************************************************************************************************/
+/*                                                                                                */
+/**************************************************************************************************/
 class UniqueWorkerTreadData
 {
 public:
@@ -34,34 +42,34 @@ public:
 	UniqueWorkerTreadData(int threadId, string directory);
 };
 
-class WorkerThreadData
-{
-public:
-	UniqueWorkerTreadData uniqueData;
-	SharedThreadData sharedData;
-public:
-	WorkerThreadData(UniqueWorkerTreadData& uniqueData, SharedThreadData& sharedData);
-};
+void masterThreadTask(MasterThreadData data);
+typedef pair<UniqueWorkerTreadData, SharedThreadData> worker_data;
+typedef pair<thread, UniqueWorkerTreadData> thread_pair;
 
-
-DirectoryWatcher::DirectoryWatcher(dw_callback callback) : m_callback(callback), m_isWatching(false)
-{
+/**************************************************************************************************/
+/*                                                                                                */
+/**************************************************************************************************/
+DirectoryWatcher::DirectoryWatcher(dw_callback callback) 
+	: m_callback(callback), m_isWatching(false) {
 	
 }
 
-DirectoryWatcher::DirectoryWatcher(string& directory, dw_callback callback) : m_callback(callback), m_isWatching(false)
-{
+/**************************************************************************************************/
+DirectoryWatcher::DirectoryWatcher(string& directory, dw_callback callback) 
+	: m_callback(callback), m_isWatching(false) {
 	m_directories.push_back(directory);
 }
 
-DirectoryWatcher::DirectoryWatcher(vector<string>& directories, dw_callback callback) : m_callback(callback), m_isWatching(false)
-{
+/**************************************************************************************************/
+DirectoryWatcher::DirectoryWatcher(vector<string>& directories, dw_callback callback) 
+	: m_callback(callback), m_isWatching(false) {
 	for (int i = 0; i < directories.size(); i++) 
 	{
 		m_directories.push_back(directories[i]);
 	}
 }
 
+/**************************************************************************************************/
 bool DirectoryWatcher::Watch(bool watchSubDir)
 {
 	if (!m_isWatching && m_directories.size() > 0)
@@ -69,13 +77,16 @@ bool DirectoryWatcher::Watch(bool watchSubDir)
 		m_ct.ResetGlobalToken();
 		m_ct.ResetIdToken();
 		SharedThreadData sharedData(m_ct, m_callback, watchSubDir);
-		m_masterThread = thread(masterThreadTask, MasterThreadData(m_directories ,m_newDirectories, m_dirsToRemove, m_mutex, sharedData));
+		m_masterThread = thread(masterThreadTask, MasterThreadData(m_directories, m_newDirectories,
+			m_dirsToRemove, m_mutex, sharedData));
+
 		m_isWatching = true;
 		return m_isWatching;
 	}
    	return false;
 }
 
+/**************************************************************************************************/
 void DirectoryWatcher::Stop() 
 {
 	if (m_isWatching) 
@@ -86,57 +97,37 @@ void DirectoryWatcher::Stop()
 	}
 }   
 
-void masterThreadTask(MasterThreadData data)
+/**************************************************************************************************/
+void DirectoryWatcher::AddDir(string& directory)
 {
-	vector<std::pair<thread, UniqueWorkerTreadData>> workers;
+	std::unique_lock<std::mutex> lock(m_mutex);
+	m_directories.push_back(directory);
+	m_newDirectories.push_back(directory);
+	lock.unlock();
+}
 
-	for(int i = 0; i < data.directories.size(); i++)
+/**************************************************************************************************/
+void DirectoryWatcher::RemoveDir(string& directory)
+{
+	std::unique_lock<std::mutex> lock(m_mutex);
+	m_dirsToRemove.push_back(directory);
+	lock.unlock();
+}
+
+/**************************************************************************************************/
+DirectoryWatcher::~DirectoryWatcher() 
+{
+	if (m_isWatching) 
 	{
-		UniqueWorkerTreadData uniqueThreadData(workers.size(), data.directories[i]);
-		workers.push_back(std::make_pair(thread(watchDirectory, WorkerThreadData(uniqueThreadData,data.sharedData)), uniqueThreadData));
-	}
-
-	while (!data.sharedData.token.IsGloballyCanceled())
-	{
-		std::unique_lock<std::mutex> lock(data.addRemoveMutex);
-		if (data.newDirectories.size() > 0)
-		{
-			for (int i = data.newDirectories.size() - 1; i >= 0; i--)
-			{
-				UniqueWorkerTreadData uniqueThreadData(workers.size(), data.directories[i]);
-				workers.push_back(std::make_pair(thread(watchDirectory, WorkerThreadData(uniqueThreadData, data.sharedData)), uniqueThreadData));
-				data.newDirectories.erase(data.newDirectories.begin() + i);
-			}
-		}
-
- 		if (data.dirsToRemove.size() > 0)
-		{
-			for (int i = data.dirsToRemove.size() - 1; i >= 0; i--)
-			{
-				auto result = std::find_if(workers.begin(), workers.end(), 
-					[data, i](const std::pair<thread, UniqueWorkerTreadData>& element) {
-						return element.second.directory == data.directories[i];
-					});
-
-				if (result != std::end(workers)) {
-					int workerId = std::distance(workers.begin(), result);
-					if (!data.sharedData.token.Cancel(workerId))
-						break;
-				}
-				data.dirsToRemove.erase(data.dirsToRemove.begin() + i);
-			}
-		}
-		lock.unlock();
-		std::this_thread::sleep_for(std::chrono::milliseconds(200));
-	}
-
-	for (int i = 0; i < workers.size(); i++)
-	{
-		workers[i].first.join();
+		m_ct.CancelGlobally();
+		m_masterThread.join();
 	}
 }
 
-int watchDirectory(WorkerThreadData data)
+/**************************************************************************************************/
+/*                                                                                                */
+/**************************************************************************************************/
+int watchDirectory(worker_data data)
 {
 	CHAR buffer[8192];
 	CHAR lpDir[_MAX_DIR];
@@ -148,10 +139,11 @@ int watchDirectory(WorkerThreadData data)
 		| FILE_NOTIFY_CHANGE_LAST_WRITE;
 
 
-	const char* path = data.uniqueData.directory.c_str();
+	const char* path = data.first.directory.c_str();
 	_splitpath_s(path, NULL, 0, lpDir, _MAX_DIR, NULL, 0, NULL, 0);
 
-	dwChangesEventHandle = FindFirstChangeNotificationA(lpDir, data.sharedData.watchSubtree, FILE_NOTIFY_EVERYTHING);
+	dwChangesEventHandle = FindFirstChangeNotificationA(lpDir, data.second.watchSubtree,
+		FILE_NOTIFY_EVERYTHING);
 
 	if (dwChangesEventHandle == INVALID_HANDLE_VALUE)
 	{
@@ -160,11 +152,11 @@ int watchDirectory(WorkerThreadData data)
 	}
 
 
-	while (!data.sharedData.token.IsGloballyCanceled())
+	while (!data.second.token.IsGloballyCanceled())
 	{
-		if (data.sharedData.token.IsCanceled(data.uniqueData.threadId))
+		if (data.second.token.IsCanceled(data.first.threadId))
 		{
-			data.sharedData.token.ResetIdToken();
+			data.second.token.ResetIdToken();
 			break;
 		}
 
@@ -174,14 +166,13 @@ int watchDirectory(WorkerThreadData data)
 		{
 		case WAIT_OBJECT_0:
 
-			if (ReadDirectoryChangesW(dwChangesEventHandle, buffer, sizeof(buffer), data.sharedData.watchSubtree, FILE_NOTIFY_EVERYTHING, &BytesReturned, NULL, NULL))
+			if (ReadDirectoryChangesW(dwChangesEventHandle, buffer, sizeof(buffer),
+				data.second.watchSubtree, FILE_NOTIFY_EVERYTHING, &BytesReturned, NULL, NULL))
 			{
 				FILE_NOTIFY_INFORMATION* notifInfo = (FILE_NOTIFY_INFORMATION*)(buffer);
 				_bstr_t bstr(notifInfo->FileName);
  				string fileName = string(bstr).substr(0, notifInfo->FileNameLength / sizeof(WCHAR));
 				
-				cout << "\nBytes returned: " << BytesReturned <<endl;
-
 				ChangeType action;
 
 				switch (notifInfo->Action)
@@ -203,7 +194,7 @@ int watchDirectory(WorkerThreadData data)
 					break;
 				}
 
-				data.sharedData.callback(fileName, action);
+				data.second.callback(fileName, action);
 			}
 
 			if (FindNextChangeNotification(dwChangesEventHandle) == FALSE)
@@ -226,42 +217,83 @@ int watchDirectory(WorkerThreadData data)
 	return 0;
 }
 
-void DirectoryWatcher::AddDir(string& directory)
+/**************************************************************************************************/
+/*                                                                                                */
+/**************************************************************************************************/
+void masterThreadTask(MasterThreadData data)
 {
-	std::unique_lock<std::mutex> lock(m_mutex);
-	m_directories.push_back(directory);
-	m_newDirectories.push_back(directory);
-	lock.unlock();
-}
 
-void DirectoryWatcher::RemoveDir(string& directory)
-{
-	std::unique_lock<std::mutex> lock(m_mutex);
-	m_dirsToRemove.push_back(directory);
-	lock.unlock();
-}
+	vector<thread_pair> workers;
 
-DirectoryWatcher::~DirectoryWatcher() 
-{
-	if (m_isWatching) 
+	for(int i = 0; i < data.directories.size(); i++)
 	{
-		m_ct.CancelGlobally();
-		m_masterThread.join();
+		UniqueWorkerTreadData uniqueThreadData(workers.size(), data.directories[i]);
+		worker_data wtData(make_pair(uniqueThreadData, data.sharedData));
+		thread_pair workerDataPair(make_pair(thread(watchDirectory, move(wtData)), 
+			uniqueThreadData));
+		workers.push_back(move(workerDataPair));
+	}
+
+	while (!data.sharedData.token.IsGloballyCanceled())
+	{
+		unique_lock<mutex> lock(data.addRemoveMutex);
+		if (data.newDirectories.size() > 0)
+		{
+			for (int i = data.newDirectories.size() - 1; i >= 0; i--)
+			{
+				UniqueWorkerTreadData uniqueThreadData(workers.size(), data.newDirectories[i]);
+				worker_data wtData(make_pair(uniqueThreadData, data.sharedData));
+				thread_pair workerDataPair(make_pair(thread(watchDirectory, move(wtData)), 
+					uniqueThreadData));
+				workers.push_back(move(workerDataPair));
+
+				data.newDirectories.erase(data.newDirectories.begin() + i);
+			}
+		}
+
+ 		if (data.dirsToRemove.size() > 0)
+		{
+			for (int i = data.dirsToRemove.size() - 1; i >= 0; i--)
+			{
+				auto result = std::find_if(workers.begin(), workers.end(), 
+					[data, i](const thread_pair& element) {
+						return element.second.directory == data.directories[i];
+					});
+
+				if (result != std::end(workers)) {
+					int workerId = std::distance(workers.begin(), result);
+					if (!data.sharedData.token.Cancel(workerId))
+						break;
+				}
+				data.dirsToRemove.erase(data.dirsToRemove.begin() + i);
+			}
+		}
+		lock.unlock();
+		std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	}
+
+	for (int i = 0; i < workers.size(); i++)
+	{
+		workers[i].first.join();
 	}
 }
 
-MasterThreadData::MasterThreadData(vector<string>& directories, vector<string>& newDirectories, vector<string>& dirsToRemove, mutex& dwMutex, SharedThreadData sharedData)
-	: directories(directories), newDirectories(newDirectories), dirsToRemove(dirsToRemove), addRemoveMutex(dwMutex), sharedData(sharedData) {
-}
+/**************************************************************************************************/
+/*                                                                                                */
+/**************************************************************************************************/
+MasterThreadData::MasterThreadData(vector<string>& directories, vector<string>& newDirectories, 
+	vector<string>& dirsToRemove, mutex& dwMutex, SharedThreadData sharedData)
+		: directories(directories), newDirectories(newDirectories), dirsToRemove(dirsToRemove), 
+		addRemoveMutex(dwMutex), sharedData(sharedData) { }
 
-WorkerThreadData::WorkerThreadData(UniqueWorkerTreadData& uniqueData, SharedThreadData& sharedData)
-	: uniqueData(uniqueData), sharedData(sharedData) {
-}
-
+/**************************************************************************************************/
+/*                                                                                                */
+/**************************************************************************************************/
 SharedThreadData::SharedThreadData(CancelationToken& token, dw_callback callback, bool watchSubtree)
-	: token(token), callback(callback), watchSubtree(watchSubtree) { 
-}
+	: token(token), callback(callback), watchSubtree(watchSubtree) { }
 
+/**************************************************************************************************/
+/*                                                                                                */
+/**************************************************************************************************/
 UniqueWorkerTreadData::UniqueWorkerTreadData(int threadId, string directory)
-	: threadId(threadId), directory(directory) {
-}
+	: threadId(threadId), directory(directory) { }
