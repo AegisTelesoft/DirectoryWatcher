@@ -12,11 +12,15 @@ int main(int argc, char *argv[]) {
 	directories.push_back(string("C:\\Users\\Egidijus Lileika\\Desktop\\test - Copy - Copy\\New folder (3)\\"));
 
 	DirectoryWatcher watcher(directories, callback);
-
-	watcher.Watch(false);
+	//DirectoryWatcher watcher(callback);
+	watcher.Watch(true);
 	system("pause");
 	watcher.RemoveDir(string("C:\\Users\\Egidijus Lileika\\Desktop\\test\\"));
 	system("pause");
+	/*watcher.Stop();
+	system("pause");
+	watcher.Watch(false);
+	system("pause");*/
 	watcher.Stop();
 	system("pause");
 	return 0;

@@ -1,5 +1,49 @@
 #include "DirectoryWatcher.h"
 
+void masterThreadTask(struct MasterThreadData data);
+int watchDirectory(struct WorkerThreadData data);
+
+class SharedThreadData
+{
+public: 
+	CancelationToken& token;
+	dw_callback callback;
+	bool watchSubtree; 
+public:
+	SharedThreadData(CancelationToken& token, dw_callback callback, bool watchSubtree);
+};
+
+class MasterThreadData
+{
+public:
+	vector<string>& directories;
+	vector<string>& newDirectories;
+	vector<string>& dirsToRemove;
+	mutex& addRemoveMutex;
+	SharedThreadData sharedData;
+public:
+	MasterThreadData(vector<string>& directories, vector<string>& newDirectories, vector<string>& dirsToRemove, mutex& dwMutex, SharedThreadData sharedData);
+};
+
+class UniqueWorkerTreadData
+{
+public:
+	int threadId;
+	string directory;
+public:
+	UniqueWorkerTreadData(int threadId, string directory);
+};
+
+class WorkerThreadData
+{
+public:
+	UniqueWorkerTreadData uniqueData;
+	SharedThreadData sharedData;
+public:
+	WorkerThreadData(UniqueWorkerTreadData& uniqueData, SharedThreadData& sharedData);
+};
+
+
 DirectoryWatcher::DirectoryWatcher(dw_callback callback) : m_callback(callback), m_isWatching(false)
 {
 	
@@ -7,63 +51,83 @@ DirectoryWatcher::DirectoryWatcher(dw_callback callback) : m_callback(callback),
 
 DirectoryWatcher::DirectoryWatcher(string& directory, dw_callback callback) : m_callback(callback), m_isWatching(false)
 {
-	m_newDirectories.push_back(string(directory));
+	m_directories.push_back(directory);
 }
 
 DirectoryWatcher::DirectoryWatcher(vector<string>& directories, dw_callback callback) : m_callback(callback), m_isWatching(false)
 {
 	for (int i = 0; i < directories.size(); i++) 
 	{
-		m_newDirectories.push_back(string(directories[i]));
+		m_directories.push_back(directories[i]);
 	}
 }
 
-void DirectoryWatcher::Watch(bool watchSubDir)
+bool DirectoryWatcher::Watch(bool watchSubDir)
 {
-	if (!m_isWatching) 
+	if (!m_isWatching && m_directories.size() > 0)
 	{
-		m_masterThread = thread(masterThreadTask, MasterThreadData(&m_newDirectories, watchSubDir, &m_dirsToRemove, &m_ct, m_callback));
+		m_ct.ResetGlobalToken();
+		m_ct.ResetIdToken();
+		SharedThreadData sharedData(m_ct, m_callback, watchSubDir);
+		m_masterThread = thread(masterThreadTask, MasterThreadData(m_directories ,m_newDirectories, m_dirsToRemove, m_mutex, sharedData));
 		m_isWatching = true;
+		return m_isWatching;
 	}
+   	return false;
 }
+
+void DirectoryWatcher::Stop() 
+{
+	if (m_isWatching) 
+	{
+		m_ct.CancelGlobally();
+		m_masterThread.join();
+		m_isWatching = false;
+	}
+}   
 
 void masterThreadTask(MasterThreadData data)
 {
-	vector<std::pair<thread, WorkerThreadData>> workers;
+	vector<std::pair<thread, UniqueWorkerTreadData>> workers;
 
-	while (!data.token->IsGloballyCanceled())
+	for(int i = 0; i < data.directories.size(); i++)
 	{
-		// Master thread checks if there are any new directories added
-		if (data.newDirectories->size() > 0)
+		UniqueWorkerTreadData uniqueThreadData(workers.size(), data.directories[i]);
+		workers.push_back(std::make_pair(thread(watchDirectory, WorkerThreadData(uniqueThreadData,data.sharedData)), uniqueThreadData));
+	}
+
+	while (!data.sharedData.token.IsGloballyCanceled())
+	{
+		std::unique_lock<std::mutex> lock(data.addRemoveMutex);
+		if (data.newDirectories.size() > 0)
 		{
-			for (int i = data.newDirectories->size() - 1; i >= 0; i--)
+			for (int i = data.newDirectories.size() - 1; i >= 0; i--)
 			{
-				WorkerThreadData workerData(data.newDirectories->operator[](i), data.watchSubtree, workers.size(), data.token, data.callback);
-				workers.push_back(std::make_pair(thread(watchDirectory, workerData), workerData));
-				data.newDirectories->erase(data.newDirectories->begin() + i);
+				UniqueWorkerTreadData uniqueThreadData(workers.size(), data.directories[i]);
+				workers.push_back(std::make_pair(thread(watchDirectory, WorkerThreadData(uniqueThreadData, data.sharedData)), uniqueThreadData));
+				data.newDirectories.erase(data.newDirectories.begin() + i);
 			}
 		}
 
-		// Master thread check if there are any new directories to remove
- 		if (data.dirsToRemove->size() > 0)
+ 		if (data.dirsToRemove.size() > 0)
 		{
-			for (int i = data.dirsToRemove->size() - 1; i >= 0; i--)
+			for (int i = data.dirsToRemove.size() - 1; i >= 0; i--)
 			{
 				auto result = std::find_if(workers.begin(), workers.end(), 
-					[data, i](const std::pair<thread, WorkerThreadData>& element) {
-						return element.second.directory == data.dirsToRemove->operator[](i);
+					[data, i](const std::pair<thread, UniqueWorkerTreadData>& element) {
+						return element.second.directory == data.directories[i];
 					});
 
 				if (result != std::end(workers)) {
-
-					//Cancel the thread
 					int workerId = std::distance(workers.begin(), result);
-					if (!data.token->Cancel(workerId))
+					if (!data.sharedData.token.Cancel(workerId))
 						break;
 				}
-				data.dirsToRemove->erase(data.dirsToRemove->begin() + i);
+				data.dirsToRemove.erase(data.dirsToRemove.begin() + i);
 			}
 		}
+		lock.unlock();
+		std::this_thread::sleep_for(std::chrono::milliseconds(200));
 	}
 
 	for (int i = 0; i < workers.size(); i++)
@@ -74,52 +138,50 @@ void masterThreadTask(MasterThreadData data)
 
 int watchDirectory(WorkerThreadData data)
 {
-	DWORD BytesReturned = 0;
-	CHAR buffer[2048];
-	OVERLAPPED overlapped;
-	const DWORD FILE_NOTIFY_EVERYTHING = 
-		FILE_NOTIFY_CHANGE_ATTRIBUTES | FILE_NOTIFY_CHANGE_DIR_NAME 
-		| FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE 
-		| FILE_NOTIFY_CHANGE_SECURITY | FILE_NOTIFY_CHANGE_SIZE;
-
+	CHAR buffer[8192];
+	CHAR lpDir[_MAX_DIR];
+	DWORD BytesReturned;
 	DWORD watcherWaitStatus;
 	HANDLE dwChangesEventHandle;
-	CHAR lpDir[_MAX_DIR];
-	CHAR lpFile[_MAX_FNAME];
-	CHAR lpExt[_MAX_EXT];
+	const DWORD FILE_NOTIFY_EVERYTHING = 
+		  FILE_NOTIFY_CHANGE_DIR_NAME	 | FILE_NOTIFY_CHANGE_FILE_NAME  
+		| FILE_NOTIFY_CHANGE_LAST_WRITE;
 
-	const char* path = data.directory.c_str();
-	_splitpath_s(path, NULL, 0, lpDir, _MAX_DIR, lpFile, _MAX_FNAME, lpExt, _MAX_EXT);
 
-	dwChangesEventHandle = FindFirstChangeNotificationA(lpDir, data.watchSubtree, FILE_NOTIFY_EVERYTHING);
+	const char* path = data.uniqueData.directory.c_str();
+	_splitpath_s(path, NULL, 0, lpDir, _MAX_DIR, NULL, 0, NULL, 0);
+
+	dwChangesEventHandle = FindFirstChangeNotificationA(lpDir, data.sharedData.watchSubtree, FILE_NOTIFY_EVERYTHING);
 
 	if (dwChangesEventHandle == INVALID_HANDLE_VALUE)
 	{
-		cout << "\nFailed to Directory watcher for " << lpDir <<  endl;
+		cout << "\nFailed to watch dir for " << lpDir <<  endl;
 		return -1;
 	}
 
 
-	while (!data.token->IsGloballyCanceled())
+	while (!data.sharedData.token.IsGloballyCanceled())
 	{
-		if (data.token->IsCanceled(data.threadId))
+		if (data.sharedData.token.IsCanceled(data.uniqueData.threadId))
 		{
-			data.token->Reset();
+			data.sharedData.token.ResetIdToken();
 			break;
 		}
 
-		watcherWaitStatus = WaitForSingleObjectEx(dwChangesEventHandle, 1000, TRUE);
+		watcherWaitStatus = WaitForSingleObject(dwChangesEventHandle, 100);
 		
 		switch (watcherWaitStatus)
 		{
 		case WAIT_OBJECT_0:
 
-			if (ReadDirectoryChangesW(dwChangesEventHandle, buffer, 2048, data.watchSubtree, FILE_NOTIFY_EVERYTHING, &BytesReturned, &overlapped, &ReadDirChangesCallback))
+			if (ReadDirectoryChangesW(dwChangesEventHandle, buffer, sizeof(buffer), data.sharedData.watchSubtree, FILE_NOTIFY_EVERYTHING, &BytesReturned, NULL, NULL))
 			{
 				FILE_NOTIFY_INFORMATION* notifInfo = (FILE_NOTIFY_INFORMATION*)(buffer);
 				_bstr_t bstr(notifInfo->FileName);
  				string fileName = string(bstr).substr(0, notifInfo->FileNameLength / sizeof(WCHAR));
 				
+				cout << "\nBytes returned: " << BytesReturned <<endl;
+
 				ChangeType action;
 
 				switch (notifInfo->Action)
@@ -134,14 +196,14 @@ int watchDirectory(WorkerThreadData data)
 					action = Modified;
 					break;
 				case FILE_ACTION_RENAMED_OLD_NAME:
-					action = Renamed; 
+					action = RenamedFrom;
 					break;
 				case FILE_ACTION_RENAMED_NEW_NAME:
-					action = Renamed;
+					action = RenamedTo;
 					break;
 				}
-				
-				data.callback(fileName, action);
+
+				data.sharedData.callback(fileName, action);
 			}
 
 			if (FindNextChangeNotification(dwChangesEventHandle) == FALSE)
@@ -149,10 +211,6 @@ int watchDirectory(WorkerThreadData data)
 				cout << "\nFailed to watch directory for file creation and deletion" << endl;
 				return -1;
 			}
-			break;
-
-		case WAIT_IO_COMPLETION:
-			//  IT's happening
 			break;
 
 		case WAIT_TIMEOUT:
@@ -165,42 +223,45 @@ int watchDirectory(WorkerThreadData data)
 			break;
 		}
 	}
-	return -1;
+	return 0;
 }
 
 void DirectoryWatcher::AddDir(string& directory)
 {
-	m_newDirectories.push_back(string(directory));
+	std::unique_lock<std::mutex> lock(m_mutex);
+	m_directories.push_back(directory);
+	m_newDirectories.push_back(directory);
+	lock.unlock();
 }
 
 void DirectoryWatcher::RemoveDir(string& directory)
 {
+	std::unique_lock<std::mutex> lock(m_mutex);
 	m_dirsToRemove.push_back(directory);
+	lock.unlock();
 }
-
-void DirectoryWatcher::Stop() 
-{
-	m_ct.CancelGlobally();
-	m_isWatching = false;
-}   
 
 DirectoryWatcher::~DirectoryWatcher() 
 {
-	m_ct.CancelGlobally();
-	m_masterThread.join();
+	if (m_isWatching) 
+	{
+		m_ct.CancelGlobally();
+		m_masterThread.join();
+	}
 }
 
-MasterThreadData::MasterThreadData(vector<string>* directories, bool watchSubtree, vector<string>* dirsToRemove, CancelationToken* token, dw_callback callback)
-	: newDirectories(directories), watchSubtree(watchSubtree), dirsToRemove(dirsToRemove), token(token), callback(callback){
+MasterThreadData::MasterThreadData(vector<string>& directories, vector<string>& newDirectories, vector<string>& dirsToRemove, mutex& dwMutex, SharedThreadData sharedData)
+	: directories(directories), newDirectories(newDirectories), dirsToRemove(dirsToRemove), addRemoveMutex(dwMutex), sharedData(sharedData) {
 }
 
-WorkerThreadData::WorkerThreadData(string dir, bool watchSubtree, int threadId, CancelationToken* token, dw_callback callback)
-	: directory(dir), watchSubtree(watchSubtree), threadId(threadId), token(token), callback(callback) {
+WorkerThreadData::WorkerThreadData(UniqueWorkerTreadData& uniqueData, SharedThreadData& sharedData)
+	: uniqueData(uniqueData), sharedData(sharedData) {
 }
 
+SharedThreadData::SharedThreadData(CancelationToken& token, dw_callback callback, bool watchSubtree)
+	: token(token), callback(callback), watchSubtree(watchSubtree) { 
+}
 
-VOID CALLBACK ReadDirChangesCallback(DWORD errorCode, DWORD bytesTransfered, LPOVERLAPPED lpOverlapped) {
-	// break point here don't trigger
-	cout << "\n" << bytesTransfered << endl;
-
+UniqueWorkerTreadData::UniqueWorkerTreadData(int threadId, string directory)
+	: threadId(threadId), directory(directory) {
 }

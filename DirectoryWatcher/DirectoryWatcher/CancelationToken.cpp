@@ -26,13 +26,20 @@ bool CancelationToken::Cancel(int id)
 }
 
 
-void CancelationToken::Reset()
+void CancelationToken::ResetIdToken()
 {
 	std::unique_lock<std::mutex> lock(m_mutex);
-	m_globalCancel = false;
 	m_id = -1;
 	lock.unlock();
 }
+
+void CancelationToken::ResetGlobalToken()
+{
+	std::unique_lock<std::mutex> lock(m_mutex);
+	m_globalCancel = false;
+	lock.unlock();
+}
+
 
 
 bool CancelationToken::IsGloballyCanceled()

@@ -9,7 +9,8 @@ public:
 	
 	void CancelGlobally();
 	bool Cancel(int id);
-	void Reset();
+	void ResetGlobalToken();
+	void ResetIdToken();
 	bool IsGloballyCanceled();
 	bool IsCanceled(int id);
 
