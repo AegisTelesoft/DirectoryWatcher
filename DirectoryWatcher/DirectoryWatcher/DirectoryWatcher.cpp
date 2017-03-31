@@ -3,14 +3,14 @@
 /**************************************************************************************************/
 /*                                                                                                */
 /**************************************************************************************************/
-class SharedThreadData
+class CommonThreadData
 {
 public: 
 	CancelationToken& token;
 	dw_callback callback;
 	bool watchSubtree; 
 public:
-	SharedThreadData(CancelationToken& token, 
+	CommonThreadData(CancelationToken& token,
 		dw_callback callback, bool watchSubtree);
 };
 
@@ -24,10 +24,10 @@ public:
 	vector<string>&  newDirectories;
 	vector<string>&  dirsToRemove;
 	mutex&           addRemoveMutex;
-	SharedThreadData sharedData;
+	CommonThreadData sharedData;
 public:
 	MasterThreadData(vector<string>& directories, vector<string>& newDirectories, 
-		vector<string>& dirsToRemove, mutex& dwMutex, SharedThreadData sharedData);
+		vector<string>& dirsToRemove, mutex& dwMutex, CommonThreadData sharedData);
 };
 
 /**************************************************************************************************/
@@ -43,7 +43,7 @@ public:
 };
 
 void masterThreadTask(MasterThreadData data);
-typedef pair<UniqueWorkerTreadData, SharedThreadData> worker_data;
+typedef pair<UniqueWorkerTreadData, CommonThreadData> worker_data;
 typedef pair<thread, UniqueWorkerTreadData> thread_pair;
 
 /**************************************************************************************************/
@@ -76,7 +76,7 @@ bool DirectoryWatcher::Watch(bool watchSubDir)
 	{
 		m_ct.ResetGlobalToken();
 		m_ct.ResetIdToken();
-		SharedThreadData sharedData(m_ct, m_callback, watchSubDir);
+		CommonThreadData sharedData(m_ct, m_callback, watchSubDir);
 		m_masterThread = thread(masterThreadTask, MasterThreadData(m_directories, m_newDirectories,
 			m_dirsToRemove, m_mutex, sharedData));
 
@@ -282,14 +282,14 @@ void masterThreadTask(MasterThreadData data)
 /*                                                                                                */
 /**************************************************************************************************/
 MasterThreadData::MasterThreadData(vector<string>& directories, vector<string>& newDirectories, 
-	vector<string>& dirsToRemove, mutex& dwMutex, SharedThreadData sharedData)
+	vector<string>& dirsToRemove, mutex& dwMutex, CommonThreadData sharedData)
 		: directories(directories), newDirectories(newDirectories), dirsToRemove(dirsToRemove), 
 		addRemoveMutex(dwMutex), sharedData(sharedData) { }
 
 /**************************************************************************************************/
 /*                                                                                                */
 /**************************************************************************************************/
-SharedThreadData::SharedThreadData(CancelationToken& token, dw_callback callback, bool watchSubtree)
+CommonThreadData::CommonThreadData(CancelationToken& token, dw_callback callback, bool watchSubtree)
 	: token(token), callback(callback), watchSubtree(watchSubtree) { }
 
 /**************************************************************************************************/
