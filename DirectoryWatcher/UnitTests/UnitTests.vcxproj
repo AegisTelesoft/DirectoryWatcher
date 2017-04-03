@@ -81,6 +81,9 @@
     <ResourceCompile>
       <AdditionalIncludeDirectories>C:\Users\Egidijus Lileika\Desktop\DW\DirectoryWatcher\DirectoryWatcher;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
+    <Link>
+      <AdditionalDependencies>Shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -128,10 +131,6 @@
     <ClInclude Include="..\DirectoryWatcher\CancelationToken.h" />
     <ClInclude Include="..\DirectoryWatcher\DirectoryWatcher.h" />
     <ClInclude Include="Fixtures.h" />
-    <ClInclude Include="resource.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="UnitTests.rc" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DirectoryWatcher\DirectoryWatcher.vcxproj">

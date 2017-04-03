@@ -25,15 +25,16 @@ using std::move;
 using std::cout;
 using std::endl;
 
-enum ChangeType {
+enum CallbackType {
 	Added,
 	Deleted,
 	Modified,
 	RenamedFrom,
-	RenamedTo
+	RenamedTo,
+	FailedToWatch
 };
 
-typedef std::function<void(string&, ChangeType)> dw_callback;
+typedef std::function<void(string& directory, CallbackType type, string& error)> dw_callback;
 
 class DirectoryWatcher
 {

@@ -1,54 +1,91 @@
 #include "Fixtures.h"
 
+unsigned FolderOperation::m_CallbackCount = 0;
+bool FolderOperation::m_FailedToWatch = false;
+std::mutex FolderOperation::m_CbMutex;
+
+/**************************************************************************************************/
+void FolderOperation::DirectoryWatcherCallback(string directory, CallbackType type, string error)
+{
+	std::unique_lock<std::mutex> lock(FolderOperation::m_CbMutex);
+	if (type == FailedToWatch)
+	{
+		FolderOperation::m_FailedToWatch = true;
+		cout << error << endl;
+	}
+
+	FolderOperation::m_CallbackCount++;
+	lock.unlock();
+}
+
+
+unsigned FolderOperation::CallbackCount()
+{
+	std::lock_guard<std::mutex> lock(m_CbMutex);
+	return FolderOperation::m_CallbackCount;
+}
+
+bool FolderOperation::WatcherFailed()
+{
+	std::lock_guard<std::mutex> lock(m_CbMutex);
+	return FolderOperation::m_FailedToWatch;
+}
+
 /**************************************************************************************************/
 bool CreateDirectoriesRecursive(int iteration, int maxIterations, CHAR rootDir[], string lastPath)
 {
-	char chars[] = "ABCDEF";
+	char chars[] = "ABC";
 
-	for (int i = 0; i <= 5; i++)
+	for (int i = 0; i < 3; i++)
 	{
-		string tmpPath = "\\" + lastPath + chars[i];
+		string tmpPath = lastPath + chars[i] + "\\";
+		string dirPath = rootDir + tmpPath;
 
-		LPCTSTR dirPath = PathCombine("", rootDir, tmpPath.c_str());
-
-		if (SHCreateDirectoryEx(NULL, dirPath, NULL) == ERROR_SUCCESS)
+		if (iteration <= maxIterations)
 		{
-
-			if (iteration <= maxIterations)
+			if (SHCreateDirectoryEx(NULL, dirPath.c_str(), NULL) == ERROR_SUCCESS)
 			{
-				// Continue recursion
-				CreateDirectoriesRecursive(iteration + 1, maxIterations, rootDir, tmpPath);
+					CreateDirectoriesRecursive(iteration + 1, maxIterations, rootDir, tmpPath);
 			}
 			else
-			{
-				// Successfully created directories recursively
-				return true;
-			}
+				return false;
 		}
-		else 
-		{
-			return false;
-		}
+		else
+			return true;
 	}
+}
+
+/**************************************************************************************************/
+LONG FolderOperation::DeleteDirectoryAndAllSubfolders(string wzDirectory)
+{
+	CHAR szDir[MAX_PATH + 1];
+	SHFILEOPSTRUCT fos = { 0 };
+
+	StringCchCopy(szDir, MAX_PATH, wzDirectory.c_str());
+	int len = lstrlen(szDir);
+	szDir[len + 1] = 0;
+
+	fos.wFunc = FO_DELETE;
+	fos.pFrom = szDir;
+	fos.fFlags = FOF_SILENT | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_NOCONFIRMMKDIR;
+	return SHFileOperation(&fos);
 }
 
 /**************************************************************************************************/
 /*                                                                                                */
 /**************************************************************************************************/
-FolderOperation::FolderOperation() 
+FolderOperation::FolderOperation()
 {
+	m_CallbackCount = 0;
+	m_FailedToWatch = false;
 	m_pathToTemp[MAX_PATH];
 	GetTempPath(MAX_PATH, m_pathToTemp);
 };
 
 /**************************************************************************************************/
-FolderOperation::~FolderOperation() {};
-
-/**************************************************************************************************/
-void FolderOperation::TearDown()
-{
+FolderOperation::~FolderOperation() {
 	DeleteFolder();
-}
+};
 
 /**************************************************************************************************/
 void FolderOperation::SetUp()
@@ -59,21 +96,18 @@ void FolderOperation::SetUp()
 /**************************************************************************************************/
 void FolderOperation::CreateFolder()
 {
-	if (!CreateDirectoriesRecursive(1, 4, m_pathToTemp, ""))
-	{
-		throw std::exception("\nERROR: Could not create directories correctly!\n");
-	}
+	CreateDirectoriesRecursive(1, 4, m_pathToTemp, "");
+	std::cout << "Test folders created..." << std::endl;
 }
 
 /**************************************************************************************************/
 void FolderOperation::DeleteFolder()
 {
-	char chars[] = "ABCDEF";
+	char chars[] = "ABC";
 
-	for (int i = 0; i <= 5; i++)
+	for (int i = 0; i < 3; i++)
 	{
-		string tmpPath = "\\" + chars[i];
-		LPCTSTR dirPath = PathCombine("", m_pathToTemp, tmpPath.c_str());
-		RemoveDirectory(dirPath);
+		DeleteDirectoryAndAllSubfolders(string(m_pathToTemp) + "\\" + chars[i] + "\\");
 	}
+	std::cout << "Clean up..." << std::endl;
 }

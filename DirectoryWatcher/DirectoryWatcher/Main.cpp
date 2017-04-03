@@ -2,7 +2,7 @@
 
 #include "DirectoryWatcher.h"
 
-void callback(string directory, ChangeType type);
+void callback(string directory, CallbackType type, string error);
 
 int main(int argc, char *argv[]) {
 
@@ -12,21 +12,16 @@ int main(int argc, char *argv[]) {
 	directories.push_back(string("C:\\Users\\Egidijus Lileika\\Desktop\\test - Copy - Copy\\New folder (3)\\"));
 
 	DirectoryWatcher watcher(directories, callback);
-	//DirectoryWatcher watcher(callback);
-	watcher.Watch(true);
+	watcher.Watch(TRUE);
+	//system("pause");
+	//watcher.RemoveDir(string("C:\\Users\\Egidijus Lileika\\Desktop\\test\\"));
 	system("pause");
-	watcher.RemoveDir(string("C:\\Users\\Egidijus Lileika\\Desktop\\test\\"));
-	system("pause");
-	/*watcher.Stop();
-	system("pause");
-	watcher.Watch(false);
-	system("pause");*/
 	watcher.Stop();
 	system("pause");
 	return 0;
 }
 
-void callback(string directory, ChangeType type)
+void callback(string directory, CallbackType type, string error)
 {
 	cout << directory << " " << type << endl;
 }

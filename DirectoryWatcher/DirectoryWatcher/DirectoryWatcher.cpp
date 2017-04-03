@@ -127,6 +127,24 @@ DirectoryWatcher::~DirectoryWatcher()
 /**************************************************************************************************/
 /*                                                                                                */
 /**************************************************************************************************/
+string GetErrorMessage()
+{
+	DWORD errorMessageID = ::GetLastError();
+	if (errorMessageID == 0)
+		return "";
+
+	LPSTR messageBuffer = nullptr;
+	size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+		NULL, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&messageBuffer, 0, NULL);
+
+	string error(messageBuffer, size);
+	LocalFree(messageBuffer);
+	return error;
+}
+
+/**************************************************************************************************/
+/*                                                                                                */
+/**************************************************************************************************/
 int watchDirectory(worker_data data)
 {
 	CHAR buffer[8192];
@@ -145,9 +163,11 @@ int watchDirectory(worker_data data)
 	dwChangesEventHandle = FindFirstChangeNotificationA(lpDir, data.second.watchSubtree,
 		FILE_NOTIFY_EVERYTHING);
 
+
 	if (dwChangesEventHandle == INVALID_HANDLE_VALUE)
 	{
-		cout << "\nFailed to watch dir for " << lpDir <<  endl;
+		string error = "\nFailed to watch " + string(lpDir) + "; Error: " + GetErrorMessage();
+		data.second.callback(string(lpDir), FailedToWatch, error);
 		return -1;
 	}
 
@@ -165,15 +185,15 @@ int watchDirectory(worker_data data)
 		switch (watcherWaitStatus)
 		{
 		case WAIT_OBJECT_0:
-
+			
 			if (ReadDirectoryChangesW(dwChangesEventHandle, buffer, sizeof(buffer),
-				data.second.watchSubtree, FILE_NOTIFY_EVERYTHING, &BytesReturned, NULL, NULL))
+				TRUE, FILE_NOTIFY_EVERYTHING, &BytesReturned, NULL, NULL))
 			{
 				FILE_NOTIFY_INFORMATION* notifInfo = (FILE_NOTIFY_INFORMATION*)(buffer);
 				_bstr_t bstr(notifInfo->FileName);
  				string fileName = string(bstr).substr(0, notifInfo->FileNameLength / sizeof(WCHAR));
 				
-				ChangeType action;
+				CallbackType action;
 
 				switch (notifInfo->Action)
 				{
@@ -194,7 +214,7 @@ int watchDirectory(worker_data data)
 					break;
 				}
 
-				data.second.callback(fileName, action);
+				data.second.callback(fileName, action, string());
 			}
 
 			if (FindNextChangeNotification(dwChangesEventHandle) == FALSE)
@@ -214,6 +234,10 @@ int watchDirectory(worker_data data)
 			break;
 		}
 	}
+	if (CloseHandle(dwChangesEventHandle) == 0) {
+		string error = "\nFailed to close directory handle; Error: " + GetErrorMessage();
+		data.second.callback(string(lpDir), FailedToWatch, error);
+	}
 	return 0;
 }
 
@@ -222,14 +246,13 @@ int watchDirectory(worker_data data)
 /**************************************************************************************************/
 void masterThreadTask(MasterThreadData data)
 {
-
 	vector<thread_pair> workers;
 
 	for(int i = 0; i < data.directories.size(); i++)
 	{
 		UniqueWorkerTreadData uniqueThreadData(workers.size(), data.directories[i]);
 		worker_data wtData(make_pair(uniqueThreadData, data.sharedData));
-		thread_pair workerDataPair(make_pair(thread(watchDirectory, move(wtData)), 
+		thread_pair workerDataPair(make_pair(thread(watchDirectory, move(wtData)),
 			uniqueThreadData));
 		workers.push_back(move(workerDataPair));
 	}
@@ -243,7 +266,7 @@ void masterThreadTask(MasterThreadData data)
 			{
 				UniqueWorkerTreadData uniqueThreadData(workers.size(), data.newDirectories[i]);
 				worker_data wtData(make_pair(uniqueThreadData, data.sharedData));
-				thread_pair workerDataPair(make_pair(thread(watchDirectory, move(wtData)), 
+				thread_pair workerDataPair(make_pair(thread(watchDirectory, move(wtData)),
 					uniqueThreadData));
 				workers.push_back(move(workerDataPair));
 
