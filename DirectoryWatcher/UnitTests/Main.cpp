@@ -40,12 +40,7 @@ TEST_F(FolderOperation, DW_CreateAndWatchSubdirs_DelteOneDirRecursive)
 	DirectoryWatcher watcher(dirs, FolderOperation::DirectoryWatcherCallback);
 	watcher.Watch(true);
 
-	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
 	DeleteDirectoryAndAllSubfolders(string(pathToTempDir) + "A\\B\\B\\");
-
-	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
 
 	EXPECT_EQ(CallbackCount(), 4);
 	EXPECT_FALSE(WatcherFailed());
@@ -67,12 +62,7 @@ TEST_F(FolderOperation, DW_CreateAndWatch_DelteOneDirRecursive)
 	DirectoryWatcher watcher(dirs, FolderOperation::DirectoryWatcherCallback);
 	watcher.Watch(false);
 
-	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
 	DeleteDirectoryAndAllSubfolders(string(pathToTempDir) + "A\\B\\B\\");
-
-	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
 
 	EXPECT_EQ(CallbackCount(), 0);
 	EXPECT_FALSE(WatcherFailed());

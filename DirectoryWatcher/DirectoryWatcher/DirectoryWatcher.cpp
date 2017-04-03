@@ -147,6 +147,11 @@ string GetErrorMessage()
 /**************************************************************************************************/
 int watchDirectory(worker_data data)
 {
+	OVERLAPPED PollingOverlap;
+	PollingOverlap.OffsetHigh = 0;
+	PollingOverlap.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	FILE_NOTIFY_INFORMATION* notifInfo;
+
 	CHAR buffer[8192];
 	CHAR lpDir[_MAX_DIR];
 	DWORD BytesReturned;
@@ -154,15 +159,16 @@ int watchDirectory(worker_data data)
 	HANDLE dwChangesEventHandle;
 	const DWORD FILE_NOTIFY_EVERYTHING = 
 		  FILE_NOTIFY_CHANGE_DIR_NAME	 | FILE_NOTIFY_CHANGE_FILE_NAME  
-		| FILE_NOTIFY_CHANGE_LAST_WRITE;
+		| FILE_NOTIFY_CHANGE_SIZE;
 
 
 	const char* path = data.first.directory.c_str();
 	_splitpath_s(path, NULL, 0, lpDir, _MAX_DIR, NULL, 0, NULL, 0);
 
-	dwChangesEventHandle = FindFirstChangeNotificationA(lpDir, data.second.watchSubtree,
-		FILE_NOTIFY_EVERYTHING);
-
+	dwChangesEventHandle = CreateFileA(lpDir, GENERIC_READ | FILE_LIST_DIRECTORY,
+		FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+		NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
+		NULL);
 
 	if (dwChangesEventHandle == INVALID_HANDLE_VALUE)
 	{
@@ -171,7 +177,7 @@ int watchDirectory(worker_data data)
 		return -1;
 	}
 
-
+	int offset;
 	while (!data.second.token.IsGloballyCanceled())
 	{
 		if (data.second.token.IsCanceled(data.first.threadId))
@@ -180,20 +186,23 @@ int watchDirectory(worker_data data)
 			break;
 		}
 
-		watcherWaitStatus = WaitForSingleObject(dwChangesEventHandle, 100);
-		
-		switch (watcherWaitStatus)
+		BOOL result = ReadDirectoryChangesW(dwChangesEventHandle, buffer, sizeof(buffer),
+			data.second.watchSubtree, FILE_NOTIFY_EVERYTHING, &BytesReturned, &PollingOverlap, NULL);
+
+
+		watcherWaitStatus = WaitForSingleObject(PollingOverlap.hEvent, 1000);
+
+		switch (watcherWaitStatus) 
 		{
 		case WAIT_OBJECT_0:
-			
-			if (ReadDirectoryChangesW(dwChangesEventHandle, buffer, sizeof(buffer),
-				TRUE, FILE_NOTIFY_EVERYTHING, &BytesReturned, NULL, NULL))
+
+			offset = 0;
+			CallbackType action;
+			do
 			{
-				FILE_NOTIFY_INFORMATION* notifInfo = (FILE_NOTIFY_INFORMATION*)(buffer);
+				notifInfo = (FILE_NOTIFY_INFORMATION*)((char*)buffer + offset);
 				_bstr_t bstr(notifInfo->FileName);
- 				string fileName = string(bstr).substr(0, notifInfo->FileNameLength / sizeof(WCHAR));
-				
-				CallbackType action;
+				string fileName = string(bstr).substr(offset * sizeof(WCHAR), notifInfo->FileNameLength / sizeof(WCHAR));
 
 				switch (notifInfo->Action)
 				{
@@ -213,15 +222,11 @@ int watchDirectory(worker_data data)
 					action = RenamedTo;
 					break;
 				}
-
 				data.second.callback(fileName, action, string());
-			}
 
-			if (FindNextChangeNotification(dwChangesEventHandle) == FALSE)
-			{
-				cout << "\nFailed to watch directory for file creation and deletion" << endl;
-				return -1;
-			}
+				offset += notifInfo->NextEntryOffset;
+			} while (notifInfo->NextEntryOffset);
+
 			break;
 
 		case WAIT_TIMEOUT:
