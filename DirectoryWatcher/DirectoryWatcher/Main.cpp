@@ -8,11 +8,11 @@ int main(int argc, char *argv[]) {
 
 	vector<string> directories;
 	directories.push_back(string("C:\\Users\\Egidijus Lileika\\Desktop\\test\\"));
-	directories.push_back(string("C:\\Users\\Egidijus Lileika\\Desktop\\test - Copy\\"));
-	directories.push_back(string("C:\\Users\\Egidijus Lileika\\Desktop\\test - Copy - Copy\\New folder (3)\\"));
 
 	DirectoryWatcher watcher(directories, callback);
-	watcher.Watch(TRUE);
+	watcher.Watch(true);
+	system("pause");
+	watcher.RemoveDir(string("C:\\Users\\Egidijus Lileika\\Desktop\\test\\"));
 	//system("pause");
 	//watcher.RemoveDir(string("C:\\Users\\Egidijus Lileika\\Desktop\\test\\"));
 	system("pause");

@@ -121,7 +121,7 @@
   <ItemGroup>
     <ClCompile Include="..\DirectoryWatcher\CancelationToken.cpp" />
     <ClCompile Include="..\DirectoryWatcher\DirectoryWatcher.cpp" />
-    <ClCompile Include="Fixtures.cpp" />
+    <ClCompile Include="FileSystemOperation.cpp" />
     <ClCompile Include="Main.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -130,7 +130,7 @@
   <ItemGroup>
     <ClInclude Include="..\DirectoryWatcher\CancelationToken.h" />
     <ClInclude Include="..\DirectoryWatcher\DirectoryWatcher.h" />
-    <ClInclude Include="Fixtures.h" />
+    <ClInclude Include="FileSystemOperation.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DirectoryWatcher\DirectoryWatcher.vcxproj">

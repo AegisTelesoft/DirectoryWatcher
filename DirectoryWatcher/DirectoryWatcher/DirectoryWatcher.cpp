@@ -101,7 +101,6 @@ void DirectoryWatcher::Stop()
 void DirectoryWatcher::AddDir(string& directory)
 {
 	std::unique_lock<std::mutex> lock(m_mutex);
-	m_directories.push_back(directory);
 	m_newDirectories.push_back(directory);
 	lock.unlock();
 }
@@ -190,7 +189,7 @@ int watchDirectory(worker_data data)
 			data.second.watchSubtree, FILE_NOTIFY_EVERYTHING, &BytesReturned, &PollingOverlap, NULL);
 
 
-		watcherWaitStatus = WaitForSingleObject(PollingOverlap.hEvent, 1000);
+		watcherWaitStatus = WaitForSingleObject(PollingOverlap.hEvent, 50);
 
 		switch (watcherWaitStatus) 
 		{
@@ -203,6 +202,7 @@ int watchDirectory(worker_data data)
 				notifInfo = (FILE_NOTIFY_INFORMATION*)((char*)buffer + offset);
 				_bstr_t bstr(notifInfo->FileName);
 				string fileName = string(bstr).substr(offset * sizeof(WCHAR), notifInfo->FileNameLength / sizeof(WCHAR));
+				offset += notifInfo->NextEntryOffset;
 
 				switch (notifInfo->Action)
 				{
@@ -222,9 +222,13 @@ int watchDirectory(worker_data data)
 					action = RenamedTo;
 					break;
 				}
-				data.second.callback(fileName, action, string());
 
-				offset += notifInfo->NextEntryOffset;
+				if (data.second.token.IsCanceled(data.first.threadId))
+				{
+					break;
+				}
+
+				data.second.callback(lpDir + fileName, action, string());
 			} while (notifInfo->NextEntryOffset);
 
 			break;
@@ -275,7 +279,7 @@ void masterThreadTask(MasterThreadData data)
 					uniqueThreadData));
 				workers.push_back(move(workerDataPair));
 
-				data.newDirectories.erase(data.newDirectories.begin() + i);
+				data.directories.push_back(move(data.newDirectories[i]));
 			}
 		}
 
@@ -285,7 +289,7 @@ void masterThreadTask(MasterThreadData data)
 			{
 				auto result = std::find_if(workers.begin(), workers.end(), 
 					[data, i](const thread_pair& element) {
-						return element.second.directory == data.directories[i];
+						return element.second.directory == data.dirsToRemove[i];
 					});
 
 				if (result != std::end(workers)) {
@@ -297,7 +301,7 @@ void masterThreadTask(MasterThreadData data)
 			}
 		}
 		lock.unlock();
-		std::this_thread::sleep_for(std::chrono::milliseconds(200));
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	}
 
 	for (int i = 0; i < workers.size(); i++)
