@@ -1,170 +1,270 @@
 #include <gtest/gtest.h>
+#include <vector>
+#include <string>
 
 #include "FileSystemOperation.h"
+#include "DirectoryWatcher.h"
+
+using std::vector;
+using std::string;
+
 
 /**************************************************************************************************/
-static void callback(string directory, CallbackType type, string error)
+/*                            Implementation specific helper class                                */
+/**************************************************************************************************/
+class TestResult
 {
-
-}
-
-/**************************************************************************************************/
-/*                                           Simple tests						                  */
-/**************************************************************************************************/
-TEST(DirectoryWatcher_create, DW_CreateAndWatch_Empty)
-{
-	DirectoryWatcher watcher(callback);
-	watcher.Watch(false);
-	watcher.Stop();
-}
-
-/**************************************************************************************************/
-TEST(DirectoryWatcher_start, DW_CreateAndWatch_OneDir)
-{
-	CHAR pathToTempDir[MAX_PATH];
-	GetTempPath(MAX_PATH, pathToTempDir);
-	
-	DirectoryWatcher watcher(string(pathToTempDir), callback);
-	watcher.Watch(true);
-	watcher.Stop();
-}
+public:
+	TestResult(int timeout) : TimeOutCurrent(timeout), TimeOut(timeout){};
+public:
+	int CallbackCount = 0;
+	int TimeOut;
+	int TimeOutCurrent;
+	bool Failure = false;
+};
 
 /**************************************************************************************************/
 /*                          Test performed on FileSystemOperation fixture                         */
 /**************************************************************************************************/
 TEST_F(FileSystemOperation, DW_CreateAndWatchSubdirs_DelteOneDirRecursive)
 {
-	CHAR pathToTempDir[MAX_PATH];
-	GetTempPath(MAX_PATH, pathToTempDir);
+	TestResult result(75);
+	std::mutex mutex;
 
-	vector<string> dirs;
-
-	char chars[] = "ABC";
-	for (int i = 0; i < 3; i++)
+	DirectoryWatcher watcher(string(GetTestDirPath() + "A\\"),
+		[&mutex, &result](string directory, CallbackType type, string details) 
 	{
-		dirs.push_back(string(pathToTempDir) + chars[i] + "\\");
-	}
+			std::unique_lock<std::mutex> lock(mutex);
 
-	DirectoryWatcher watcher(dirs, FileSystemOperation::DirectoryWatcherCallback);
+			result.CallbackCount++;
+			result.TimeOutCurrent = result.TimeOut;
+
+			if (type == FailedToWatch)
+				result.Failure = true;
+
+			lock.unlock();
+	});
+
 	watcher.Watch(true);
 
-	DeleteDirectoryAndAllSubfolders(string(pathToTempDir) + "A\\B\\B\\");
+	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
 
-	EXPECT_EQ(CallbackCount(), 8);
-	EXPECT_FALSE(WatcherFailed());
+	// Wait for results with minimal main thread interuption. If wait time-outs, loop breaks.
+	while (true)
+	{
+		std::unique_lock<std::mutex> lock(mutex);
+		if (result.TimeOutCurrent <= 0)
+			break;
+
+		result.TimeOutCurrent--;
+		lock.unlock();
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+
+	EXPECT_EQ(result.CallbackCount, 2);
+	EXPECT_FALSE(result.Failure);
 }
 
 /**************************************************************************************************/
 TEST_F(FileSystemOperation, DW_CreateAndWatch_DelteOneDirRecursive)
 {
-	CHAR pathToTempDir[MAX_PATH];
-	GetTempPath(MAX_PATH, pathToTempDir);
+	TestResult result(75);
+	std::mutex mutex;
 
-	vector<string> dirs;
-
-	char chars[] = "ABC";
-	for (int i = 0; i < 3; i++)
+	DirectoryWatcher watcher(string(GetTestDirPath() + "A\\"),
+		[&mutex, &result](string directory, CallbackType type, string details) 
 	{
-		dirs.push_back(string(pathToTempDir) + chars[i] + "\\");
-	}
+		std::unique_lock<std::mutex> lock(mutex);
 
-	DirectoryWatcher watcher(dirs, FileSystemOperation::DirectoryWatcherCallback);
+		result.CallbackCount++;
+		result.TimeOutCurrent = result.TimeOut;
+
+		if (type == FailedToWatch)
+			result.Failure = true;
+
+		lock.unlock();
+	});
+
 	watcher.Watch(false);
 
-	DeleteDirectoryAndAllSubfolders(string(pathToTempDir) + "A\\B\\B\\");
+	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
 
-	EXPECT_EQ(CallbackCount(), 0);
-	EXPECT_FALSE(WatcherFailed());
+	while (true)
+	{
+		std::unique_lock<std::mutex> lock(mutex);
+		if (result.TimeOutCurrent <= 0)
+			break;
+
+		result.TimeOutCurrent--;
+		lock.unlock();
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+
+	EXPECT_EQ(result.CallbackCount, 0);
+	EXPECT_FALSE(result.Failure);
 }
 
 /**************************************************************************************************/
 TEST_F(FileSystemOperation, DW_AddDirectoryWatchSubDirs_AndAndDelete)
 {
-	CHAR pathToTempDir[MAX_PATH];
-	GetTempPath(MAX_PATH, pathToTempDir);
+	TestResult result(75);
+	std::mutex mutex;
 
-	DirectoryWatcher watcher(string(pathToTempDir) + "B\\C\\", 
-		FileSystemOperation::DirectoryWatcherCallback);
+	DirectoryWatcher watcher([&mutex, &result](string directory, CallbackType type, string details) 
+	{
+		std::unique_lock<std::mutex> lock(mutex);
+
+		result.CallbackCount++;
+		result.TimeOutCurrent = result.TimeOut;
+
+		if (type == FailedToWatch)
+			result.Failure = true;
+
+		lock.unlock();
+	});
 
 	watcher.Watch(true);
 
-	watcher.AddDir(string(pathToTempDir) +"A\\B\\C");
+	watcher.AddDir(GetTestDirPath() + "A\\");
 
-	DeleteDirectoryAndAllSubfolders(string(pathToTempDir) + "A\\B\\C\\A\\");
+	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\");
 
-	EXPECT_EQ(CallbackCount(), 2);
-	EXPECT_FALSE(WatcherFailed());
+	while (true)
+	{
+		std::unique_lock<std::mutex> lock(mutex);
+		if (result.TimeOutCurrent <= 0)
+			break;
+
+		result.TimeOutCurrent--;
+		lock.unlock();
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+
+	EXPECT_EQ(result.CallbackCount, 4);
+	EXPECT_FALSE(result.Failure);
 }
 
 /**************************************************************************************************/
 TEST_F(FileSystemOperation, DW_AddDirectory_AndAndDelete)
 {
-	CHAR pathToTempDir[MAX_PATH];
-	GetTempPath(MAX_PATH, pathToTempDir);
+	TestResult result(75);
+	std::mutex mutex;
 
-	DirectoryWatcher watcher(string(pathToTempDir) + "B\\C\\",
-		FileSystemOperation::DirectoryWatcherCallback);
+	DirectoryWatcher watcher([&mutex, &result](string directory, CallbackType type, string details) 
+	{
+		std::unique_lock<std::mutex> lock(mutex);
+
+		result.CallbackCount++;
+		result.TimeOutCurrent = result.TimeOut;
+
+		if (type == FailedToWatch)
+			result.Failure = true;
+
+		lock.unlock();
+	});
 
 	watcher.Watch(false);
 
-	watcher.AddDir(string(pathToTempDir) + "A\\B\\C");
+	watcher.AddDir(GetTestDirPath() + "A\\");
 
-	DeleteDirectoryAndAllSubfolders(string(pathToTempDir) + "A\\B\\C\\A\\");
+	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
 
-	EXPECT_EQ(CallbackCount(), 0);
-	EXPECT_FALSE(WatcherFailed());
+	while (true)
+	{
+		std::unique_lock<std::mutex> lock(mutex);
+		if (result.TimeOutCurrent <= 0)
+			break;
+
+		result.TimeOutCurrent--;
+		lock.unlock();
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+
+	EXPECT_EQ(result.CallbackCount, 0);
+	EXPECT_FALSE(result.Failure);
 }
 
 /**************************************************************************************************/
 TEST_F(FileSystemOperation, DW_RemoveDirSubDirs_RemoveAndDelete)
 {
-	CHAR pathToTempDir[MAX_PATH];
-	GetTempPath(MAX_PATH, pathToTempDir);
+	TestResult result(75);
+	std::mutex mutex;
 
-	vector<string> dirs;
-
-	char chars[] = "ABC";
-	for (int i = 0; i < 3; i++)
+	DirectoryWatcher watcher(GetTestDirPath() + "A\\",
+		[&mutex, &result](string directory, CallbackType type, string details) 
 	{
-		dirs.push_back(string(pathToTempDir) + chars[i] + "\\" + chars[i] + "\\");
-	}
+		std::unique_lock<std::mutex> lock(mutex);
 
-	DirectoryWatcher watcher(dirs, FileSystemOperation::DirectoryWatcherCallback);
+		result.CallbackCount++;
+		result.TimeOutCurrent = result.TimeOut;
+
+		if (type == FailedToWatch)
+			result.Failure = true;
+
+		lock.unlock();
+	});
 
 	watcher.Watch(true);
 
-	watcher.RemoveDir(string(pathToTempDir) + "B\\B\\");
+	watcher.RemoveDir(GetTestDirPath() + "A\\");
 
-	DeleteDirectoryAndAllSubfolders(string(pathToTempDir) + "B\\B\\C\\A\\");
+	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
 
-	EXPECT_EQ(CallbackCount(), 0);
-	EXPECT_FALSE(WatcherFailed());
+	while (true)
+	{
+		std::unique_lock<std::mutex> lock(mutex);
+		if (result.TimeOutCurrent <= 0)
+			break;
+
+		result.TimeOutCurrent--;
+		lock.unlock();
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+
+	EXPECT_EQ(result.CallbackCount, 0);
+	EXPECT_FALSE(result.Failure);
 }
 
 /**************************************************************************************************/
 TEST_F(FileSystemOperation, DW_RemoveDir_RemoveAndDelete)
 {
-	CHAR pathToTempDir[MAX_PATH];
-	GetTempPath(MAX_PATH, pathToTempDir);
+	TestResult result(75);
+	std::mutex mutex;
 
-	vector<string> dirs;
-
-	char chars[] = "ABC";
-	for (int i = 0; i < 3; i++)
+	DirectoryWatcher watcher(GetTestDirPath() + "A\\",
+		[&mutex, &result](string directory, CallbackType type, string details) 
 	{
-		dirs.push_back(string(pathToTempDir) + chars[i] + "\\");
-	}
+		std::unique_lock<std::mutex> lock(mutex);
 
-	DirectoryWatcher watcher(dirs, FileSystemOperation::DirectoryWatcherCallback);
+		result.CallbackCount++;
+		result.TimeOutCurrent = result.TimeOut;
+
+		if (type == FailedToWatch)
+			result.Failure = true;
+
+		lock.unlock();
+	});
 
  	watcher.Watch(false);
 
-	watcher.RemoveDir(string(pathToTempDir) + "B\\");
+	watcher.RemoveDir(GetTestDirPath() + "A\\");
 
-	DeleteDirectoryAndAllSubfolders(string(pathToTempDir) + "B\\");
+	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
 
-	EXPECT_EQ(CallbackCount(), 0);
-	EXPECT_FALSE(WatcherFailed());
+	while (true)
+	{
+		std::unique_lock<std::mutex> lock(mutex);
+		if (result.TimeOutCurrent <= 0)
+			break;
+
+		result.TimeOutCurrent--;
+		lock.unlock();
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+
+	EXPECT_EQ(result.CallbackCount, 0);
+	EXPECT_FALSE(result.Failure);
 }
 
 /**************************************************************************************************/
