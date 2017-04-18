@@ -76,13 +76,14 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)DirectoryWatcher;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)DirectoryWatcherDLL;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ResourceCompile>
       <AdditionalIncludeDirectories>C:\Users\Egidijus Lileika\Desktop\DW\DirectoryWatcher\DirectoryWatcher;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>Shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Shlwapi.lib;DirectoryWatcherDLL.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -119,8 +120,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\DirectoryWatcher\CancelationToken.cpp" />
-    <ClCompile Include="..\DirectoryWatcher\DirectoryWatcher.cpp" />
     <ClCompile Include="FileSystemOperation.cpp" />
     <ClCompile Include="Main.cpp" />
   </ItemGroup>
@@ -128,14 +127,7 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\DirectoryWatcher\CancelationToken.h" />
-    <ClInclude Include="..\DirectoryWatcher\DirectoryWatcher.h" />
     <ClInclude Include="FileSystemOperation.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\DirectoryWatcher\DirectoryWatcher.vcxproj">
-      <Project>{e2838a9d-54d6-46d8-925a-2f6cd7011193}</Project>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

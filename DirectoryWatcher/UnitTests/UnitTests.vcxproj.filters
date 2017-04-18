@@ -9,22 +9,10 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
     </Filter>
-    <Filter Include="Source Files\DirectoryWatcherSource">
-      <UniqueIdentifier>{be42305e-c1bf-4687-b281-55fbeb38c701}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Header Files\DirectoryWatcherHeaders">
-      <UniqueIdentifier>{9e2b2358-ddf6-4c29-b018-30285c32fcf0}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\DirectoryWatcher\CancelationToken.cpp">
-      <Filter>Source Files\DirectoryWatcherSource</Filter>
-    </ClCompile>
-    <ClCompile Include="..\DirectoryWatcher\DirectoryWatcher.cpp">
-      <Filter>Source Files\DirectoryWatcherSource</Filter>
     </ClCompile>
     <ClCompile Include="FileSystemOperation.cpp">
       <Filter>Source Files</Filter>
@@ -34,12 +22,6 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\DirectoryWatcher\CancelationToken.h">
-      <Filter>Header Files\DirectoryWatcherHeaders</Filter>
-    </ClInclude>
-    <ClInclude Include="..\DirectoryWatcher\DirectoryWatcher.h">
-      <Filter>Header Files\DirectoryWatcherHeaders</Filter>
-    </ClInclude>
     <ClInclude Include="FileSystemOperation.h">
       <Filter>Header Files</Filter>
     </ClInclude>
