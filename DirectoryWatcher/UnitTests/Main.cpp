@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include <vector>
+#include <mutex>
 #include <string>
+#include <chrono>
 
 #include "FileSystemOperation.h"
 #include "DirectoryWatcher.h"
@@ -8,19 +10,37 @@
 using std::vector;
 using std::string;
 
+typedef std::chrono::high_resolution_clock Clock;
 
 /**************************************************************************************************/
 /*                            Implementation specific helper class                                */
 /**************************************************************************************************/
-class TestResult
+class Timeout
 {
 public:
-	TestResult(int timeout) : TimeOutCurrent(timeout), TimeOut(timeout){};
+	Timeout() {};
+
 public:
-	int CallbackCount = 0;
-	int TimeOut;
-	int TimeOutCurrent;
-	bool Failure = false;
+	static bool WaitForCondition(int timeoutMS, std::function<bool()> condition)
+	{
+		bool timeout = false;
+		auto startTime = Clock::now();
+
+		while (!timeout && !condition())
+		{
+			if (std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - startTime).count() >= timeoutMS)
+			{ 
+				timeout = true;
+				break;
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		}
+
+		if (!timeout)
+			return false;
+		else
+			return true;
+	}
 };
 
 /**************************************************************************************************/
@@ -28,19 +48,21 @@ public:
 /**************************************************************************************************/
 TEST_F(FileSystemOperation, DW_CreateAndWatchSubdirs_DelteOneDirRecursive)
 {
-	TestResult result(75);
 	std::mutex mutex;
 
+	int callbackCount = 0;
+	int expectedCallbackCount = 2;
+	bool failed = false;
+
 	DirectoryWatcher watcher(string(GetTestDirPath() + "A\\"),
-		[&mutex, &result](string directory, CallbackType type, string details) 
+		[&mutex, &failed, &callbackCount] (string directory, CallbackType type, string details)
 	{
 			std::unique_lock<std::mutex> lock(mutex);
 
-			result.CallbackCount++;
-			result.TimeOutCurrent = result.TimeOut;
+			callbackCount++;
 
 			if (type == FailedToWatch)
-				result.Failure = true;
+				failed = true;
 
 			lock.unlock();
 	});
@@ -49,39 +71,33 @@ TEST_F(FileSystemOperation, DW_CreateAndWatchSubdirs_DelteOneDirRecursive)
 
 	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
 
-	// Wait for results with minimal main thread interuption. If wait time-outs, loop breaks.
-	while (true)
+	Timeout::WaitForCondition(100, [&mutex, &callbackCount, &expectedCallbackCount]() 
 	{
-		std::unique_lock<std::mutex> lock(mutex);
-		if (result.TimeOutCurrent <= 0)
-			break;
+		std::lock_guard<std::mutex> lock(mutex);
+		return (callbackCount == expectedCallbackCount);
+	});
 
-		result.TimeOutCurrent--;
-		lock.unlock();
-
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-	}
-
-	EXPECT_EQ(result.CallbackCount, 2);
-	EXPECT_FALSE(result.Failure);
+	EXPECT_EQ(callbackCount, expectedCallbackCount);
+	EXPECT_FALSE(failed);
 }
 
 /**************************************************************************************************/
 TEST_F(FileSystemOperation, DW_CreateAndWatch_DelteOneDirRecursive)
 {
-	TestResult result(75);
 	std::mutex mutex;
 
+	int callbackCount = 0;
+	bool failed = false;
+
 	DirectoryWatcher watcher(string(GetTestDirPath() + "A\\"),
-		[&mutex, &result](string directory, CallbackType type, string details) 
+		[&mutex, &failed, &callbackCount](string directory, CallbackType type, string details)
 	{
 		std::unique_lock<std::mutex> lock(mutex);
 
-		result.CallbackCount++;
-		result.TimeOutCurrent = result.TimeOut;
+		callbackCount++;
 
 		if (type == FailedToWatch)
-			result.Failure = true;
+			failed = true;
 
 		lock.unlock();
 	});
@@ -90,36 +106,33 @@ TEST_F(FileSystemOperation, DW_CreateAndWatch_DelteOneDirRecursive)
 
 	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
 
-	while (true)
+	Timeout::WaitForCondition(100, [&mutex, &callbackCount]() 
 	{
-		std::unique_lock<std::mutex> lock(mutex);
-		if (result.TimeOutCurrent <= 0)
-			break;
+		std::lock_guard<std::mutex> lock(mutex);
+		return (callbackCount != 0);
+	});
 
-		result.TimeOutCurrent--;
-		lock.unlock();
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-	}
-
-	EXPECT_EQ(result.CallbackCount, 0);
-	EXPECT_FALSE(result.Failure);
+	EXPECT_EQ(callbackCount, 0);
+	EXPECT_FALSE(failed);
 }
 
 /**************************************************************************************************/
 TEST_F(FileSystemOperation, DW_AddDirectoryWatchSubDirs_AndAndDelete)
 {
-	TestResult result(75);
 	std::mutex mutex;
 
-	DirectoryWatcher watcher([&mutex, &result](string directory, CallbackType type, string details) 
+	int callbackCount = 0;
+	int expectedCallbackCount = 4;
+	bool failed = false;
+
+	DirectoryWatcher watcher([&mutex, &failed, &callbackCount](string directory, CallbackType type, string details)
 	{
 		std::unique_lock<std::mutex> lock(mutex);
 
-		result.CallbackCount++;
-		result.TimeOutCurrent = result.TimeOut;
+		callbackCount++;
 
 		if (type == FailedToWatch)
-			result.Failure = true;
+			failed = true;
 
 		lock.unlock();
 	});
@@ -130,36 +143,33 @@ TEST_F(FileSystemOperation, DW_AddDirectoryWatchSubDirs_AndAndDelete)
 
 	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\");
 
-	while (true)
+	Timeout::WaitForCondition(100, [&mutex, &callbackCount, &expectedCallbackCount]()
 	{
-		std::unique_lock<std::mutex> lock(mutex);
-		if (result.TimeOutCurrent <= 0)
-			break;
+		std::lock_guard<std::mutex> lock(mutex);
+		return (callbackCount == expectedCallbackCount);
+	});
 
-		result.TimeOutCurrent--;
-		lock.unlock();
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-	}
 
-	EXPECT_EQ(result.CallbackCount, 4);
-	EXPECT_FALSE(result.Failure);
+	EXPECT_EQ(callbackCount, expectedCallbackCount);
+	EXPECT_FALSE(failed);
 }
 
 /**************************************************************************************************/
 TEST_F(FileSystemOperation, DW_AddDirectory_AndAndDelete)
 {
-	TestResult result(75);
 	std::mutex mutex;
 
-	DirectoryWatcher watcher([&mutex, &result](string directory, CallbackType type, string details) 
+	int callbackCount = 0;
+	bool failed = false;
+
+	DirectoryWatcher watcher([&mutex, &failed, &callbackCount](string directory, CallbackType type, string details)
 	{
 		std::unique_lock<std::mutex> lock(mutex);
 
-		result.CallbackCount++;
-		result.TimeOutCurrent = result.TimeOut;
+		callbackCount++;
 
 		if (type == FailedToWatch)
-			result.Failure = true;
+			failed = true;
 
 		lock.unlock();
 	});
@@ -170,37 +180,32 @@ TEST_F(FileSystemOperation, DW_AddDirectory_AndAndDelete)
 
 	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
 
-	while (true)
+	Timeout::WaitForCondition(100, [&mutex, &callbackCount]()
 	{
-		std::unique_lock<std::mutex> lock(mutex);
-		if (result.TimeOutCurrent <= 0)
-			break;
-
-		result.TimeOutCurrent--;
-		lock.unlock();
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-	}
-
-	EXPECT_EQ(result.CallbackCount, 0);
-	EXPECT_FALSE(result.Failure);
+		std::lock_guard<std::mutex> lock(mutex);
+		return (callbackCount != 0);
+	});
+	EXPECT_EQ(callbackCount, 0);
+	EXPECT_FALSE(failed);
 }
 
 /**************************************************************************************************/
 TEST_F(FileSystemOperation, DW_RemoveDirSubDirs_RemoveAndDelete)
 {
-	TestResult result(75);
 	std::mutex mutex;
 
+	int callbackCount = 0;
+	bool failed = false;
+
 	DirectoryWatcher watcher(GetTestDirPath() + "A\\",
-		[&mutex, &result](string directory, CallbackType type, string details) 
+		[&mutex, &failed, &callbackCount](string directory, CallbackType type, string details)
 	{
 		std::unique_lock<std::mutex> lock(mutex);
 
-		result.CallbackCount++;
-		result.TimeOutCurrent = result.TimeOut;
+		callbackCount++;
 
 		if (type == FailedToWatch)
-			result.Failure = true;
+			failed = true;
 
 		lock.unlock();
 	});
@@ -211,37 +216,32 @@ TEST_F(FileSystemOperation, DW_RemoveDirSubDirs_RemoveAndDelete)
 
 	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
 
-	while (true)
+	Timeout::WaitForCondition(100, [&mutex, &callbackCount]()
 	{
-		std::unique_lock<std::mutex> lock(mutex);
-		if (result.TimeOutCurrent <= 0)
-			break;
-
-		result.TimeOutCurrent--;
-		lock.unlock();
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-	}
-
-	EXPECT_EQ(result.CallbackCount, 0);
-	EXPECT_FALSE(result.Failure);
+		std::lock_guard<std::mutex> lock(mutex);
+		return (callbackCount != 0);
+	});
+	EXPECT_EQ(callbackCount, 0);
+	EXPECT_FALSE(failed);
 }
 
 /**************************************************************************************************/
 TEST_F(FileSystemOperation, DW_RemoveDir_RemoveAndDelete)
 {
-	TestResult result(75);
 	std::mutex mutex;
 
+	int callbackCount = 0;
+	bool failed = false;
+
 	DirectoryWatcher watcher(GetTestDirPath() + "A\\",
-		[&mutex, &result](string directory, CallbackType type, string details) 
+		[&mutex, &failed, &callbackCount](string directory, CallbackType type, string details)
 	{
 		std::unique_lock<std::mutex> lock(mutex);
 
-		result.CallbackCount++;
-		result.TimeOutCurrent = result.TimeOut;
+		callbackCount++;
 
 		if (type == FailedToWatch)
-			result.Failure = true;
+			failed = true;
 
 		lock.unlock();
 	});
@@ -252,19 +252,13 @@ TEST_F(FileSystemOperation, DW_RemoveDir_RemoveAndDelete)
 
 	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
 
-	while (true)
+	Timeout::WaitForCondition(100, [&mutex, &callbackCount]()
 	{
-		std::unique_lock<std::mutex> lock(mutex);
-		if (result.TimeOutCurrent <= 0)
-			break;
-
-		result.TimeOutCurrent--;
-		lock.unlock();
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-	}
-
-	EXPECT_EQ(result.CallbackCount, 0);
-	EXPECT_FALSE(result.Failure);
+		std::lock_guard<std::mutex> lock(mutex);
+		return (callbackCount != 0);
+	});
+	EXPECT_EQ(callbackCount, 0);
+	EXPECT_FALSE(failed);
 }
 
 /**************************************************************************************************/
