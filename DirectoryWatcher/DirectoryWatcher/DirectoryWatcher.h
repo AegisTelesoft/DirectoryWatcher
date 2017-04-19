@@ -32,6 +32,9 @@
 	ToDo's:
 	- Linux implemention of filesystem monitor
 
+	Blog post that led me right way https://qualapps.blogspot.lt/2010/05/understanding-readdirectorychangesw.html
+	(by Jim Beveridge)
+
 	This utility was made in order to get more experience with C++, learn more about win32 API, to 
 	consolidate practical use of multithreaded programming. 
 
