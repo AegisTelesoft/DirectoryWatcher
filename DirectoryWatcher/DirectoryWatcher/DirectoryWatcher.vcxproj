@@ -21,8 +21,9 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{252237BC-F1FD-4566-92F4-17B98D0C948E}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>DirectoryWatcherDLL</RootNamespace>
+    <RootNamespace>DirectoryWatcher</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+    <ProjectName>DirectoryWatcher</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
