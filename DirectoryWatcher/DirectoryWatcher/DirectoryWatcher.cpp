@@ -33,7 +33,7 @@ using std::endl;
 typedef pair<string, struct stat> file;
 
 /**************************************************************************************************/
-/*                                                                                                */
+/*          ThreadData class object is being passed to DirectoryWatcher worker thread             */
 /**************************************************************************************************/
 class ThreadData
 {
@@ -47,10 +47,8 @@ public:
 	ThreadData(int threadId, std::string directory, CancelationToken& token, 
 		dw_callback callback, bool watchSubtree);
 };
-/**************************************************************************************************/
-/*                                                                                                */
-/**************************************************************************************************/
 
+/**************************************************************************************************/
 namespace Utilities
 {
 #ifdef _WIN32
@@ -114,6 +112,7 @@ namespace Utilities
 		else
 			cout << Utilities::GetErrorMessage() << endl;
 
+		// If watching sub-directories, recursively call this function
 		if (watchSubDirs)
 			for (int i = 0; i < directories.size(); i++)
 			{
@@ -123,6 +122,7 @@ namespace Utilities
 					results.push_back(move(result[i]));
 			}
 
+		// In case current directory is watcher's root directory, add this directories stats to the list
 		if (dir.compare(rootDir) == 0)
 		{
 			struct stat fileStatBuffer;
@@ -138,7 +138,8 @@ namespace Utilities
 #endif // _WIN32
 }
 
-
+/**************************************************************************************************/
+/*                    Separated worker thread functions to limit usage scope                      */
 /**************************************************************************************************/
 namespace WorkerTasks 
 {
@@ -177,35 +178,41 @@ namespace WorkerTasks
 				callback(newTree[i].first, Added, string("Added"));
 		}
 	}
-}
 
-/**************************************************************************************************/
-/*                                                                                                */
-/**************************************************************************************************/
-static int watchDirectory(ThreadData data)
-{
-	vector<file> tree = Utilities::findAllFilesAndDirs(data.Directory, data.Directory, data.WatchSubtree);
-
-	while (!data.Token.IsGloballyCanceled())
+	/**************************************************************************************************/
+	/* Worker thread tasks that mainly checks old directory and file tree for modifications, creates  */
+	/* new directory and file tree and checks for new files/folders                                           */
+	/**************************************************************************************************/
+	static int watchDirectory(ThreadData data)
 	{
-		if (data.Token.IsCanceled(data.ThreadId)) //Check for reset
+		vector<file> tree = Utilities::findAllFilesAndDirs(data.Directory, data.Directory, data.WatchSubtree);
+
+		// Checking if threads aren't canceled globally
+		while (!data.Token.IsGloballyCanceled())
 		{
-			data.Token.ResetIdToken();
-			return 0;
+			// Checking if this thread isn't canceled due to DirectoryWatcher.Remove(...) method
+			if (data.Token.IsCanceled(data.ThreadId)) //Check for reset
+			{
+				data.Token.ResetIdToken();
+				return 0;
+			}
+
+			// Checking old directory and file tree
+			WorkerTasks::CheckOldTree(tree, data.Callback);
+
+			vector<file> newTree = Utilities::findAllFilesAndDirs(data.Directory, data.Directory, data.WatchSubtree);
+
+			// Checking new directory and file tree
+			WorkerTasks::CheckNewTree(tree, newTree, data.Callback);
+
+			tree = move(newTree);
+
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
-
-		WorkerTasks::CheckOldTree(tree, data.Callback);
-
-		vector<file> newTree = Utilities::findAllFilesAndDirs(data.Directory, data.Directory, data.WatchSubtree);
-
-		WorkerTasks::CheckNewTree(tree, newTree, data.Callback);
-
-		tree = move(newTree);
-
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		return 0;
 	}
-	return 0;
 }
+
 
 /**************************************************************************************************/
 /*                                                                                                */
@@ -230,8 +237,8 @@ DirectoryWatcher::DirectoryWatcher(vector<string> directories, dw_callback callb
 	}
 }
 
-
-
+/**************************************************************************************************/
+/* This method starts directory watcher. This method creates thread for each given directory      */
 /**************************************************************************************************/
 bool DirectoryWatcher::Watch(bool watchSubDir)
 {
@@ -244,7 +251,7 @@ bool DirectoryWatcher::Watch(bool watchSubDir)
 		for (int i = 0; i < m_directories.size(); i++)
 		{
 			ThreadData data(m_watchers.size(), m_directories[i], m_ct, m_callback, m_watchSubDiretories);
-			watcher workerDataPair(make_pair(thread(watchDirectory, data), m_directories[i]));
+			watcher workerDataPair(make_pair(thread(WorkerTasks::watchDirectory, data), m_directories[i]));
 			m_watchers.push_back(move(workerDataPair));
 		}
 
@@ -254,6 +261,8 @@ bool DirectoryWatcher::Watch(bool watchSubDir)
    	return false;
 }
 
+/**************************************************************************************************/
+/*            This method cancels all worker threads via custom cancelation token                 */
 /**************************************************************************************************/
 void DirectoryWatcher::Stop() 
 {
@@ -269,31 +278,46 @@ void DirectoryWatcher::Stop()
 }   
 
 /**************************************************************************************************/
+/*  This method adds directory to watching list. In case DirectoryWatcher is already running this */
+/*  methods starts new thread that watches given directory                                        */
+/**************************************************************************************************/
 void DirectoryWatcher::AddDir(string directory)
 {
 	if (m_isWatching)
 	{
 		ThreadData data(m_watchers.size(), directory, m_ct, m_callback, m_watchSubDiretories);
-		watcher workerDataPair(make_pair(thread(watchDirectory, data), directory));
+		watcher workerDataPair(make_pair(thread(WorkerTasks::watchDirectory, data), directory));
 		m_watchers.push_back(move(workerDataPair));
 	}
 	m_directories.push_back(directory);
 }
 
 /**************************************************************************************************/
+/* This method stops worker thread that watches given directory and removes that directory from   */
+/* directory watcher's list																		  */
+/**************************************************************************************************/
 void DirectoryWatcher::RemoveDir(string directory)
 {
-	auto result = std::find_if(m_watchers.begin(), m_watchers.end(),
+	auto workerIterator = std::find_if(m_watchers.begin(), m_watchers.end(),
 		[directory](const watcher& element) {
 		return element.second == directory;
 	});
 		
-	if (result != std::end(m_watchers)) 
+	if (workerIterator != std::end(m_watchers))
 	{
-		int workerId = std::distance(m_watchers.begin(), result);
+		int workerId = std::distance(m_watchers.begin(), workerIterator);
 
 		while (!m_ct.Cancel(workerId));
 	}
+
+	auto dirIterator = std::find_if(m_directories.begin(), m_directories.end(),
+		[directory](const string& element) {
+		return element == directory;
+	});
+
+	if (dirIterator != std::end(m_directories))
+		m_directories.erase(dirIterator);
+	
 }
 
 /**************************************************************************************************/
