@@ -1,5 +1,0 @@
-C:/Users/Egidijus Lileika/Desktop/DW/DirectoryWatcher/build/CMakeFiles/unitTest.dir
-C:/Users/Egidijus Lileika/Desktop/DW/DirectoryWatcher/build/CMakeFiles/ALL_BUILD.dir
-C:/Users/Egidijus Lileika/Desktop/DW/DirectoryWatcher/build/CMakeFiles/ZERO_CHECK.dir
-C:/Users/Egidijus Lileika/Desktop/DW/DirectoryWatcher/build/DirectoryWatcher/CMakeFiles/DirectoryWatcher.dir
-C:/Users/Egidijus Lileika/Desktop/DW/DirectoryWatcher/build/DirectoryWatcher/CMakeFiles/ALL_BUILD.dir
