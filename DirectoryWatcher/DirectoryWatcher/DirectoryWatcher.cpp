@@ -15,8 +15,6 @@
 
 #include <windows.h>
 #include <tchar.h>
-#include <comdef.h>
-#include <Strsafe.h>
 #endif
 
 using std::vector;
@@ -80,7 +78,7 @@ namespace Utilities
 
 		CHAR dirPath[_MAX_DIR];
 		_splitpath_s(dir.c_str(), NULL, 0, dirPath, _MAX_DIR, NULL, 0, NULL, 0);
-		StringCchCatA(dirPath, _MAX_DIR, "*.*");
+		std::strncat(dirPath, "*.*", _MAX_DIR - 1);
 
 		findHandle = FindFirstFileA(dirPath, &fileInfo);
 

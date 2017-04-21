@@ -1,10 +1,14 @@
 #pragma once
 
-#ifdef DIRECTORYWATCHERDLL_EXPORTS  
-	#define DW_EXPORT __declspec(dllexport)   
-#else  
-	#define DW_EXPORT __declspec(dllimport)   
-#endif  
+#ifdef _WIN32
+	#ifdef DIRECTORYWATCHERDLL_EXPORTS  
+		#define DW_EXPORT __declspec(dllexport)   
+	#else  
+		#define DW_EXPORT __declspec(dllimport)   
+	#endif
+#else 
+	#define DW_EXPORT
+#endif
 
 #include <string>
 #include <vector>
@@ -46,7 +50,7 @@
 /**************************************************************************************************/
 /*  Describes the type of change or directory watcher's operation failure in specified directory  */
 /**************************************************************************************************/
-DW_EXPORT enum CallbackType {
+enum DW_EXPORT CallbackType {
 	Added,
 	Deleted,
 	Modified,
@@ -56,12 +60,12 @@ DW_EXPORT enum CallbackType {
 /**************************************************************************************************/
 /*              Callback type definition used by DirectoryWatcher class                           */
 /**************************************************************************************************/
-DW_EXPORT typedef std::function<void(std::string& directory, CallbackType type, std::string& details)> dw_callback;
+typedef DW_EXPORT std::function<void(std::string& directory, CallbackType type, std::string& details)> dw_callback;
 
 /**************************************************************************************************/
 /*              Type that defines worker thread that observes specified directory                 */
 /**************************************************************************************************/
-DW_EXPORT typedef std::pair<std::thread, std::string> watcher;
+typedef DW_EXPORT std::pair<std::thread, std::string> watcher;
 
 /**************************************************************************************************/
 /*                                 DirectoryWatcher class                                         */

@@ -1,17 +1,21 @@
 #pragma once
 
-#ifdef DIRECTORYWATCHERDLL_EXPORTS  
-	#define DW_EXPORT __declspec(dllexport)   
-#else  
-	#define DW_EXPORT __declspec(dllimport)   
-#endif  
+#ifdef _WIN32
+	#ifdef DIRECTORYWATCHERDLL_EXPORTS  
+		#define DW_EXPORT __declspec(dllexport)   
+	#else  
+		#define DW_EXPORT __declspec(dllimport)   
+	#endif
+#else 
+	#define DW_EXPORT
+#endif
 
 #include <mutex>
 
 /**************************************************************************************************/
 /*  My implementation of thread cancelation token used in my filesystem observer implementation   */
 /**************************************************************************************************/
-class DW_EXPORT CancelationToken
+class CancelationToken
 {
 public:
 	CancelationToken();
