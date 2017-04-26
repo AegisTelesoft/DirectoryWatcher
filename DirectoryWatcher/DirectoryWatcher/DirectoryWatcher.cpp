@@ -1,20 +1,18 @@
 #include "DirectoryWatcher.h"
 
 #include <iostream>
-#include <sys/stat.h>
-#include <chrono>
 #include <mutex>
+#include <chrono>
 #include <algorithm>
-
-// stat headers 
 #include <time.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 
-//Win api headers
-#ifdef _WIN32
-
-#include <windows.h>
-#include <tchar.h>
+#if defined (WINDOWS)
+	#include <windows.h>
+	#include <tchar.h>
+#elif defined (LINUX)
+	#include <dirent.h>
 #endif
 
 using std::vector;
@@ -39,17 +37,18 @@ public:
 	int ThreadId;
 	std::string Directory;
 	CancelationToken& Token;
+	StatusFlag<DirectoryWatcherStatus>& Status;
 	dw_callback Callback;
 	bool WatchSubtree;
 public:
 	ThreadData(int threadId, std::string directory, CancelationToken& token, 
-		dw_callback callback, bool watchSubtree);
+		StatusFlag<DirectoryWatcherStatus>& status, dw_callback callback, bool watchSubtree);
 };
 
 /**************************************************************************************************/
 namespace Utilities
 {
-#ifdef _WIN32
+#if defined (WINDOWS)
 
 	string GetErrorMessage()
 	{
@@ -133,7 +132,65 @@ namespace Utilities
 
 		return move(results);
 	}
-#endif // _WIN32
+
+#elif defined (LINUX)
+
+	static vector<file> findAllFilesAndDirs(string directory, string rootDir, bool watchSubDirs)
+	{
+		vector<file> results;
+
+		string dirToOpen = directory;
+		auto dir = opendir(dirToOpen.c_str());
+
+		if(dir != NULL)
+		{
+			struct stat fileStatBuffer;
+			stat(directory.c_str(), &fileStatBuffer);
+			results.push_back(move(make_pair(directory, move(fileStatBuffer))));
+
+			auto entity = readdir(dir);
+
+			while(entity != NULL)
+			{
+				if(entity->d_type == DT_DIR)
+				{
+					if(entity->d_name[0] != '.')
+					{
+						string fullDirPath = directory + string(entity->d_name) + "/";
+
+						if (watchSubDirs)
+						{
+							vector<file> result = findAllFilesAndDirs(fullDirPath, rootDir, watchSubDirs);
+
+							for (int i = 0; i < result.size(); i++)
+								results.push_back(move(result[i]));
+						}
+					}
+				}
+
+				if(entity->d_type == DT_REG)
+				{
+					string fullFilePath = directory + string(entity->d_name);
+
+					struct stat fileStatBuffer;
+					stat(fullFilePath.c_str(), &fileStatBuffer);
+
+					results.push_back(move(make_pair(fullFilePath, move(fileStatBuffer))));
+				}
+
+				entity = readdir(dir);
+			}
+		}
+		closedir(dir);
+
+		// for(int i = 0; i < results.size(); i++)
+		// {
+		// 	cout << results[i].first << endl;
+		// }
+		return move(results);
+	}
+
+#endif 
 }
 
 /**************************************************************************************************/
@@ -185,6 +242,8 @@ namespace WorkerTasks
 	{
 		vector<file> tree = Utilities::findAllFilesAndDirs(data.Directory, data.Directory, data.WatchSubtree);
 
+		data.Status.SetStatus(Watching);
+
 		// Checking if threads aren't canceled globally
 		while (!data.Token.IsGloballyCanceled())
 		{
@@ -216,19 +275,19 @@ namespace WorkerTasks
 /*                                                                                                */
 /**************************************************************************************************/
 DirectoryWatcher::DirectoryWatcher(dw_callback callback) 
-	: m_callback(callback), m_isWatching(false) {
+	: m_callback(callback), m_isWatching(false), m_statusFlag(Idle) {
 	
 }
 
 /**************************************************************************************************/
 DirectoryWatcher::DirectoryWatcher(string directory, dw_callback callback) 
-	: m_callback(callback), m_isWatching(false) {
+	: m_callback(callback), m_isWatching(false), m_statusFlag(Idle) {
 	m_directories.push_back(directory);
 }
 
 /**************************************************************************************************/
 DirectoryWatcher::DirectoryWatcher(vector<string> directories, dw_callback callback) 
-	: m_callback(callback), m_isWatching(false) {
+	: m_callback(callback), m_isWatching(false), m_statusFlag(Idle) {
 	for (int i = 0; i < directories.size(); i++) 
 	{
 		m_directories.push_back(directories[i]);
@@ -248,7 +307,7 @@ bool DirectoryWatcher::Watch(bool watchSubDir)
 
 		for (int i = 0; i < m_directories.size(); i++)
 		{
-			ThreadData data(m_watchers.size(), m_directories[i], m_ct, m_callback, m_watchSubDiretories);
+			ThreadData data(m_watchers.size(), m_directories[i], m_ct, m_statusFlag, m_callback, m_watchSubDiretories);
 			watcher workerDataPair(make_pair(thread(WorkerTasks::watchDirectory, data), m_directories[i]));
 			m_watchers.push_back(move(workerDataPair));
 		}
@@ -272,6 +331,7 @@ void DirectoryWatcher::Stop()
 			m_watchers[i].first.join();
 		}
 		m_isWatching = false;
+		m_statusFlag.SetStatus(Idle);
 	}
 }   
 
@@ -283,7 +343,7 @@ void DirectoryWatcher::AddDir(string directory)
 {
 	if (m_isWatching)
 	{
-		ThreadData data(m_watchers.size(), directory, m_ct, m_callback, m_watchSubDiretories);
+		ThreadData data(m_watchers.size(), directory, m_ct, m_statusFlag, m_callback, m_watchSubDiretories);
 		watcher workerDataPair(make_pair(thread(WorkerTasks::watchDirectory, data), directory));
 		m_watchers.push_back(move(workerDataPair));
 	}
@@ -319,6 +379,12 @@ void DirectoryWatcher::RemoveDir(string directory)
 }
 
 /**************************************************************************************************/
+DirectoryWatcherStatus DirectoryWatcher::GetStatus()
+{
+	return m_statusFlag.GetStatus();
+}
+
+/**************************************************************************************************/
 DirectoryWatcher::~DirectoryWatcher() 
 {
 	if (m_isWatching) 
@@ -334,5 +400,5 @@ DirectoryWatcher::~DirectoryWatcher()
 /**************************************************************************************************/
 /*                                                                                                */
 /**************************************************************************************************/
-ThreadData::ThreadData(int threadId, string directory, CancelationToken& token, dw_callback callback, bool watchSubtree)
-	: ThreadId(threadId), Directory(directory), Token(token), Callback(callback), WatchSubtree(watchSubtree) { }
+ThreadData::ThreadData(int threadId, string directory, CancelationToken& token, StatusFlag<DirectoryWatcherStatus>& status, dw_callback callback, bool watchSubtree)
+	: ThreadId(threadId), Directory(directory), Token(token), Status(status), Callback(callback), WatchSubtree(watchSubtree) { }

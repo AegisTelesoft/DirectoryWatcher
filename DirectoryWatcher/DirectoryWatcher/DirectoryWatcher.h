@@ -1,13 +1,25 @@
 #pragma once
 
-#ifdef _WIN32
+#if defined (_WIN32)
+	#define WINDOWS
+#elif (__linux__) || defined (__linux)
+	#define LINUX
+#endif
+
+#if defined (WINDOWS)
 	#ifdef DIRECTORYWATCHERDLL_EXPORTS  
 		#define DW_EXPORT __declspec(dllexport)   
 	#else  
 		#define DW_EXPORT __declspec(dllimport)   
 	#endif
-#else 
-	#define DW_EXPORT
+#elif defined (LINUX)
+	#define DW_EXPORT __attribute__ ((dllexport))
+
+	#if __GNUC__ >= 4
+    	#define DW_EXPORT __attribute__ ((visibility ("default")))
+	#else
+		#define DW_EXPORT
+	#endif
 #endif
 
 #include <string>
@@ -15,6 +27,7 @@
 #include <thread>
 
 #include "CancelationToken.h"
+#include "StatusFlag.h"
 
 /*	This is an implementation of filesystem monitor concept that was created to report filesystem 
 	changes to application.
@@ -58,9 +71,17 @@ enum DW_EXPORT CallbackType {
 };
 
 /**************************************************************************************************/
+/*  Describes DirectoryWatcher status  */
+/**************************************************************************************************/
+enum DW_EXPORT DirectoryWatcherStatus {
+	Idle,
+	Watching
+};
+
+/**************************************************************************************************/
 /*              Callback type definition used by DirectoryWatcher class                           */
 /**************************************************************************************************/
-typedef DW_EXPORT std::function<void(std::string& directory, CallbackType type, std::string& details)> dw_callback;
+typedef DW_EXPORT std::function<void(std::string& directory, CallbackType type, const std::string& details)> dw_callback;
 
 /**************************************************************************************************/
 /*              Type that defines worker thread that observes specified directory                 */
@@ -98,6 +119,9 @@ public:
 	   watches specified directory */
 	void RemoveDir(std::string directory);
 
+	/* Returns DirectoryWacher's watch status*/
+	DirectoryWatcherStatus GetStatus();
+
 	//---------------------------------------------------------------------------------------------
 	//  Private Members
 	//---------------------------------------------------------------------------------------------
@@ -108,6 +132,7 @@ private:
 	bool m_isWatching;
 	bool m_watchSubDiretories;
 	dw_callback m_callback;
+	StatusFlag<DirectoryWatcherStatus> m_statusFlag;
 };
 
 

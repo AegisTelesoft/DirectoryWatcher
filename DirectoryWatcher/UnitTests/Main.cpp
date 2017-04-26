@@ -54,7 +54,13 @@ TEST_F(FileSystemOperation, DW_CreateAndWatchSubdirs_DelteOneDirRecursive)
 	int expectedCallbackCount = 2;
 	bool failed = false;
 
-	DirectoryWatcher watcher(string(GetTestDirPath() + "A\\"),
+#if defined (WINDOWS)
+	string dir("A\\");
+#elif defined (LINUX)
+	string dir("A/");
+#endif
+
+	DirectoryWatcher watcher(string(GetTestDirPath() + dir),
 		[&mutex, &failed, &callbackCount] (string directory, CallbackType type, string details)
 	{
 			std::unique_lock<std::mutex> lock(mutex);
@@ -69,7 +75,18 @@ TEST_F(FileSystemOperation, DW_CreateAndWatchSubdirs_DelteOneDirRecursive)
 
 	watcher.Watch(true);
 
-	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
+#if defined (WINDOWS)
+	string dirToDelete("A\\B\\C\\");
+#elif defined (LINUX)
+	string dirToDelete("A/B/C/");
+#endif
+
+	while(watcher.GetStatus() != Watching){
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+
+	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + dirToDelete);
+
 
 	Timeout::WaitForCondition(100, [&mutex, &callbackCount, &expectedCallbackCount]() 
 	{
@@ -89,7 +106,13 @@ TEST_F(FileSystemOperation, DW_CreateAndWatch_DelteOneDirRecursive)
 	int callbackCount = 0;
 	bool failed = false;
 
-	DirectoryWatcher watcher(string(GetTestDirPath() + "A\\"),
+#if defined (WINDOWS)
+	string dir("A\\");
+#elif defined (LINUX)
+	string dir("A/");
+#endif
+
+	DirectoryWatcher watcher(string(GetTestDirPath() + dir),
 		[&mutex, &failed, &callbackCount](string directory, CallbackType type, string details)
 	{
 		std::unique_lock<std::mutex> lock(mutex);
@@ -104,7 +127,13 @@ TEST_F(FileSystemOperation, DW_CreateAndWatch_DelteOneDirRecursive)
 
 	watcher.Watch(false);
 
-	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
+#if defined (WINDOWS)
+	string dirToDelete("A\\B\\C\\");
+#elif defined (LINUX)
+	string dirToDelete("A/B/C/");
+#endif
+
+	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + dirToDelete);
 
 	Timeout::WaitForCondition(100, [&mutex, &callbackCount]() 
 	{
@@ -139,9 +168,26 @@ TEST_F(FileSystemOperation, DW_AddDirectoryWatchSubDirs_AndAndDelete)
 
 	watcher.Watch(true);
 
-	watcher.AddDir(GetTestDirPath() + "A\\");
+#if defined (WINDOWS)
+	string dir("A\\");
+#elif defined (LINUX)
+	string dir("A/");
+#endif
 
-	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\");
+	watcher.AddDir(GetTestDirPath() + dir);
+
+#if defined (WINDOWS)
+	string dirToDelete("A\\B\\");
+#elif defined (LINUX)
+	string dirToDelete("A/B/");
+#endif
+
+	while(watcher.GetStatus() != Watching){
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+
+
+	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + dirToDelete);
 
 	Timeout::WaitForCondition(100, [&mutex, &callbackCount, &expectedCallbackCount]()
 	{
@@ -176,9 +222,21 @@ TEST_F(FileSystemOperation, DW_AddDirectory_AndAndDelete)
 
 	watcher.Watch(false);
 
-	watcher.AddDir(GetTestDirPath() + "A\\");
+#if defined (WINDOWS)
+	string dir("A\\");
+#elif defined (LINUX)
+	string dir("A/");
+#endif
 
-	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
+	watcher.AddDir(GetTestDirPath() + dir);
+
+#if defined (WINDOWS)
+	string dirToDelete("A\\B\\");
+#elif defined (LINUX)
+	string dirToDelete("A/B/");
+#endif
+
+	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + dirToDelete);
 
 	Timeout::WaitForCondition(100, [&mutex, &callbackCount]()
 	{
@@ -197,7 +255,13 @@ TEST_F(FileSystemOperation, DW_RemoveDirSubDirs_RemoveAndDelete)
 	int callbackCount = 0;
 	bool failed = false;
 
-	DirectoryWatcher watcher(GetTestDirPath() + "A\\",
+#if defined (WINDOWS)
+	string dir("A\\");
+#elif defined (LINUX)
+	string dir("A/");
+#endif
+
+	DirectoryWatcher watcher(GetTestDirPath() + dir,
 		[&mutex, &failed, &callbackCount](string directory, CallbackType type, string details)
 	{
 		std::unique_lock<std::mutex> lock(mutex);
@@ -212,9 +276,15 @@ TEST_F(FileSystemOperation, DW_RemoveDirSubDirs_RemoveAndDelete)
 
 	watcher.Watch(true);
 
-	watcher.RemoveDir(GetTestDirPath() + "A\\");
+	watcher.RemoveDir(GetTestDirPath() + dir);
 
-	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
+#if defined (WINDOWS)
+	string dirToDelete("A\\B\\C\\");
+#elif defined (LINUX)
+	string dirToDelete("A/B/C/");
+#endif
+
+	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + dirToDelete);
 
 	Timeout::WaitForCondition(100, [&mutex, &callbackCount]()
 	{
@@ -233,7 +303,14 @@ TEST_F(FileSystemOperation, DW_RemoveDir_RemoveAndDelete)
 	int callbackCount = 0;
 	bool failed = false;
 
-	DirectoryWatcher watcher(GetTestDirPath() + "A\\",
+#if defined (WINDOWS)
+	string dir("A\\");
+#elif defined (LINUX)
+	string dir("A/");
+#endif
+
+
+	DirectoryWatcher watcher(GetTestDirPath() + dir,
 		[&mutex, &failed, &callbackCount](string directory, CallbackType type, string details)
 	{
 		std::unique_lock<std::mutex> lock(mutex);
@@ -248,9 +325,15 @@ TEST_F(FileSystemOperation, DW_RemoveDir_RemoveAndDelete)
 
  	watcher.Watch(false);
 
-	watcher.RemoveDir(GetTestDirPath() + "A\\");
+	watcher.RemoveDir(GetTestDirPath() + dir);
 
-	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + "A\\B\\C\\");
+#if defined (WINDOWS)
+	string dirToDelete("A\\B\\C\\");
+#elif defined (LINUX)
+	string dirToDelete("A/B/C/");
+#endif
+
+	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + dirToDelete);
 
 	Timeout::WaitForCondition(100, [&mutex, &callbackCount]()
 	{
@@ -268,6 +351,8 @@ int main(int argc, char* argv[])
 {
 	testing::InitGoogleTest(&argc, argv);
 	int result = RUN_ALL_TESTS();
+#if defined (WINDOWS)
 	system("pause");
+#endif
 	return result;
 }

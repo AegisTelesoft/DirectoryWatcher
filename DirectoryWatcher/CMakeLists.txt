@@ -3,19 +3,27 @@ project(UnitTest)
 
 add_subdirectory(DirectoryWatcher)
 
-add_executable(unitTest "UnitTests/main.cpp" "UnitTests/FileSystemOperation.cpp")
+include_directories(
+    ${CMAKE_SOURCE_DIR}/build/DirectoryWatcher/lib/include 
+    ${CMAKE_SOURCE_DIR}/dependencies/include
+)
 
-target_include_directories(unitTest PRIVATE "${PROJECT_BINARY_DIR}")
-include_directories(${CMAKE_SOURCE_DIR}/dependencies/include)
+if (UNIX)
+    link_directories(${CMAKE_BINARY_DIR}/DirectoryWatcher/lib)
+    link_directories(${CMAKE_SOURCE_DIR}/dependencies/linux/gtest)
+endif (UNIX)
 
-target_link_libraries(unitTest ${CMAKE_SOURCE_DIR}/dependencies/lib/gtest.lib)
-target_link_libraries(unitTest DirectoryWatcher)
+add_executable(UnitTest "UnitTests/Main.cpp" "UnitTests/FileSystemOperation.cpp")
 
-get_target_property(DirectoryWatcherType DirectoryWatcher TYPE)
-if(DirectoryWatcherType STREQUAL "SHARED_LIBRARY")
-  add_custom_command(TARGET unitTest POST_BUILD
-                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                         $<TARGET_FILE:DirectoryWatcher> $<TARGET_FILE_DIR:unitTest>
-                     COMMENT "Copying DirectoryWatcher shared lib alongside unitTest."
-                     VERBATIM)
-endif()
+if (WIN32)
+    target_link_libraries(UnitTest DirectoryWatcher)
+    target_link_libraries(UnitTest ${CMAKE_SOURCE_DIR}/dependencies/lib/gtest.lib)
+endif (WIN32)
+
+
+if (UNIX)
+    target_link_libraries(UnitTest gtest gtest_main) 
+    target_link_libraries(UnitTest DirectoryWatcher)
+endif (UNIX)
+
+ 

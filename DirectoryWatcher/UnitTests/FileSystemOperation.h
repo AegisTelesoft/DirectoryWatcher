@@ -1,7 +1,13 @@
 #pragma once
 
 #include "gtest/gtest.h"
-#include <Windows.h>
+
+#if defined (_WIN32)
+	#define WINDOWS
+#elif defined (__linux__) || defined (__linux)
+	#define LINUX
+#endif
+
 
 class FileSystemOperation : public ::testing::Test
 {
@@ -9,7 +15,7 @@ protected:
 	FileSystemOperation();
 	~FileSystemOperation();
 	virtual void SetUp();
-	static LONG DeleteDirectoryAndAllSubfolders(std::string wzDirectory);
+	static void DeleteDirectoryAndAllSubfolders(std::string wzDirectory);
 	std::string GetTestDirPath();
 
 private:

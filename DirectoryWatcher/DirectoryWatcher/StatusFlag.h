@@ -5,20 +5,18 @@
 /**************************************************************************************************/
 /*  My implementation of thread cancelation token used in my filesystem observer implementation   */
 /**************************************************************************************************/
-class CancelationToken
+template <typename Enum_type> 
+class StatusFlag
 {
 public:
-	CancelationToken();
+	StatusFlag(Enum_type status);
 	
-	void CancelGlobally();
-	bool Cancel(int id);
-	void ResetGlobalToken();
-	void ResetIdToken();
-	bool IsGloballyCanceled();
-	bool IsCanceled(int id);
+	void SetStatus(Enum_type status);
+	Enum_type GetStatus();
 
 private:
-	bool m_globalCancel;
-	int m_id;
+	Enum_type m_status;
 	std::mutex m_mutex;
 };
+
+#include "StatusFlag.tpp"
