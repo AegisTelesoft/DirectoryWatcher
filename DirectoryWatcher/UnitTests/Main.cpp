@@ -231,9 +231,9 @@ TEST_F(FileSystemOperation, DW_AddDirectory_AndAndDelete)
 	watcher.AddDir(GetTestDirPath() + dir);
 
 #if defined (WINDOWS)
-	string dirToDelete("A\\B\\");
+	string dirToDelete("A\\B\\C\\");
 #elif defined (LINUX)
-	string dirToDelete("A/B/");
+	string dirToDelete("A/B/C/");
 #endif
 
 	DeleteDirectoryAndAllSubfolders(GetTestDirPath() + dirToDelete);
