@@ -164,7 +164,7 @@ namespace Utilities
 								results.push_back(move(result[i]));
 						}
 						else
-							results.push_back(move(make_pair(fullPath, move(fileStatBuffer))));
+							results.push_back(move(make_pair(fullDirPath, move(fileStatBuffer))));
 					}
 				}
 
