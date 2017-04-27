@@ -66,11 +66,9 @@ namespace Utilities
 	}
 
 	/**************************************************************************************************/
-	static vector<file> findAllFilesAndDirs(string dir, string rootDir, bool watchSubDirs)
+	static vector<file> findAllFilesAndDirs(string dir, bool watchSubDirs)
 	{
 		vector<file> results;
-		vector<file> directories;
-
 
 		HANDLE findHandle;
 		WIN32_FIND_DATAA fileInfo;
@@ -83,6 +81,11 @@ namespace Utilities
 
 		if (findHandle != INVALID_HANDLE_VALUE)
 		{
+
+			struct stat dirStatBuffer;
+			stat(dir.c_str(), &dirStatBuffer);
+			results.push_back(move(make_pair(string(dir), move(dirStatBuffer))));
+
 			do
 			{
 				string fullPath = (string(dir) + string(fileInfo.cFileName));
@@ -98,10 +101,26 @@ namespace Utilities
 
 					// check if folders aren't strange dots (probably path to forward and back)
 					if (strcmp(fileInfo.cFileName, key1) && strcmp(fileInfo.cFileName, key2))
-						directories.push_back(move(make_pair(fullPath, move(fileStatBuffer))));
+					{
+
+						if (watchSubDirs)
+						{
+							vector<file> result = findAllFilesAndDirs(fullPath + "\\", watchSubDirs);
+
+							for (int i = 0; i < result.size(); i++)
+								results.push_back(move(result[i]));
+						}
+						else
+						{
+							results.push_back(move(make_pair(fullPath+ "\\", move(fileStatBuffer))));
+						}
+
+					}
 				}
 				else
+				{
 					results.push_back(move(make_pair(fullPath, move(fileStatBuffer))));
+				}
 
 			} while (FindNextFileA(findHandle, &fileInfo));
 			FindClose(findHandle);
@@ -109,33 +128,12 @@ namespace Utilities
 		else
 			cout << Utilities::GetErrorMessage() << endl;
 
-		// If watching sub-directories, recursively call this function
-		if (watchSubDirs)
-			for (int i = 0; i < directories.size(); i++)
-			{
-				vector<file> result = findAllFilesAndDirs(directories[i].first + "\\", rootDir, watchSubDirs);
-
-				for (int i = 0; i < result.size(); i++)
-					results.push_back(move(result[i]));
-			}
-
-		// In case current directory is watcher's root directory, add this directories stats to the list
-		if (dir.compare(rootDir) == 0)
-		{
-			struct stat fileStatBuffer;
-			stat(rootDir.c_str(), &fileStatBuffer);
-			results.push_back(move(make_pair(string(rootDir), move(fileStatBuffer))));
-		}
-
-		for (int i = 0; i < directories.size(); i++)
-			results.push_back(move(directories[i]));
-
 		return move(results);
 	}
 
 #elif defined (LINUX)
 
-	static vector<file> findAllFilesAndDirs(string directory, string rootDir, bool watchSubDirs)
+	static vector<file> findAllFilesAndDirs(string directory, bool watchSubDirs)
 	{
 		vector<file> results;
 
@@ -160,11 +158,13 @@ namespace Utilities
 
 						if (watchSubDirs)
 						{
-							vector<file> result = findAllFilesAndDirs(fullDirPath, rootDir, watchSubDirs);
+							vector<file> result = findAllFilesAndDirs(fullDirPath, watchSubDirs);
 
 							for (int i = 0; i < result.size(); i++)
 								results.push_back(move(result[i]));
 						}
+						else
+							results.push_back(move(make_pair(fullPath, move(fileStatBuffer))));
 					}
 				}
 
@@ -183,10 +183,6 @@ namespace Utilities
 		}
 		closedir(dir);
 
-		// for(int i = 0; i < results.size(); i++)
-		// {
-		// 	cout << results[i].first << endl;
-		// }
 		return move(results);
 	}
 
@@ -240,7 +236,7 @@ namespace WorkerTasks
 	/**************************************************************************************************/
 	static int watchDirectory(ThreadData data)
 	{
-		vector<file> tree = Utilities::findAllFilesAndDirs(data.Directory, data.Directory, data.WatchSubtree);
+		vector<file> tree = Utilities::findAllFilesAndDirs(data.Directory, data.WatchSubtree);
 
 		data.Status.SetStatus(Watching);
 
@@ -257,7 +253,7 @@ namespace WorkerTasks
 			// Checking old directory and file tree
 			WorkerTasks::CheckOldTree(tree, data.Callback);
 
-			vector<file> newTree = Utilities::findAllFilesAndDirs(data.Directory, data.Directory, data.WatchSubtree);
+			vector<file> newTree = Utilities::findAllFilesAndDirs(data.Directory, data.WatchSubtree);
 
 			// Checking new directory and file tree
 			WorkerTasks::CheckNewTree(tree, newTree, data.Callback);
