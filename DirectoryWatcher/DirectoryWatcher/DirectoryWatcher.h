@@ -4,6 +4,8 @@
 	#define WINDOWS
 #elif (__linux__) || defined (__linux)
 	#define LINUX
+#elif defined (__ANDROID__)
+	#define ANDROID
 #endif
 
 #if defined (WINDOWS)
@@ -20,6 +22,8 @@
 	#else
 		#define DW_EXPORT
 	#endif
+#elif defined (ANDROID)
+	#define DW_EXPORT
 #endif
 
 #include <string>
