@@ -3,7 +3,7 @@ IF NOT EXIST "%cd%\build\" (
 ) 
 set OUTPUT=%cd%\build\
 
-cmake -H"%cd%" -B"%OUTPUT%"
+cmake -DCMAKE_USER_MAKE_RULES_OVERRIDE=ClangOverrides.txt -H"%cd%" -B"%OUTPUT%"
 
 cmake --build "%OUTPUT%"
 pause
