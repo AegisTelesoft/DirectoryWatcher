@@ -1,6 +1,6 @@
 # DirectoryWatcher
 
-You can find more specific information in DirectoryWatcher/DirectoryWatcher/DirectoryWatcher.h
+You can find more specific information [here](https://github.com/AegisTelesoft/DirectoryWatcher/blob/master/DirectoryWatcher/DirectoryWatcher/DirectoryWatcher.h)
 
 ## Usage Example
 ```c++
