@@ -1,36 +1,18 @@
-cmake_minimum_required(VERSION 3.7)
-project(UnitTest)
+cmake_minimum_required(VERSION 3.0)
+project(DirectoryWatcher)
 
-add_subdirectory(DirectoryWatcher)
+SET(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
+set(CMAKE_CXX_STANDARD 11)
 
-include_directories(
-    ${CMAKE_SOURCE_DIR}/build/DirectoryWatcher/lib/include 
-    ${CMAKE_SOURCE_DIR}/dependencies/include
+add_library(DirectoryWatcher SHARED 
+    DirectoryWatcher.cpp 
+    DirectoryWatcher.h 
+    CancelationToken.cpp  
+    CancelationToken.h
+    StatusFlag.h
+    StatusFlag.tpp
 )
 
-if (UNIX)
-    link_directories(${CMAKE_BINARY_DIR}/DirectoryWatcher/lib)
-    link_directories(${CMAKE_SOURCE_DIR}/dependencies/linux/gtest)
-endif (UNIX)
+target_include_directories(DirectoryWatcher PUBLIC ${PROJECT_SOURCE_DIR} ${LIBRARY_OUTPUT_PATH})
 
-add_executable(UnitTest "UnitTests/Main.cpp" "UnitTests/FileSystemOperation.cpp")
-
-if (WIN32)
-    target_link_libraries(UnitTest DirectoryWatcher)
-    target_link_libraries(UnitTest ${CMAKE_SOURCE_DIR}/dependencies/win32/gtest/gtest.lib)
-endif (WIN32)
-
-if (UNIX)
-    target_link_libraries(UnitTest gtest gtest_main) 
-    target_link_libraries(UnitTest DirectoryWatcher)
-endif (UNIX)
-
-get_target_property(DirectoryWatcherType DirectoryWatcher TYPE)
-if(DirectoryWatcherType STREQUAL "SHARED_LIBRARY")
-add_custom_command(TARGET UnitTest POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        $<TARGET_FILE:DirectoryWatcher> $<TARGET_FILE_DIR:UnitTest>
-                    COMMENT "Copying DirectoryWatcher shared lib alongside UnitTest."
-                    VERBATIM)
-endif()
-
+file(INSTALL DirectoryWatcher.h CancelationToken.h StatusFlag.h StatusFlag.tpp DESTINATION "${LIBRARY_OUTPUT_PATH}/include")
